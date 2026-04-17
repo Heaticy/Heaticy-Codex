@@ -70,9 +70,7 @@ const state = reactive({
   replayGuardPrompt: "",
   replayGuardUntil: 0,
   lastSubmitText: "",
-  lastSubmitAt: 0,
-  backendHttpOrigin: "",
-  backendWsOrigin: ""
+  lastSubmitAt: 0
 });
 let syncingRouteOpen = false;
 
@@ -610,49 +608,16 @@ async function refreshSessions() {
   state.sessions = sessions;
 }
 
-function toOriginProtocol(proto) {
-  return String(proto || "").toLowerCase() === "https:" ? "https:" : "http:";
-}
-
 function toWsProtocol(proto) {
   return String(proto || "").toLowerCase() === "https:" ? "wss:" : "ws:";
 }
 
-function normalizeBackendHost(rawHost) {
-  const host = String(rawHost || "").trim();
-  if (!host || host === "0.0.0.0" || host === "::") {
-    return window.location.hostname || "localhost";
-  }
-  if (host === "::1") {
-    return "localhost";
-  }
-  return host;
-}
-
-function applyBackendConfig(payload) {
-  const host = normalizeBackendHost(payload?.host);
-  const port = Number(payload?.port || 0);
-  if (!host || !port) {
-    return;
-  }
-  const httpProtocol = toOriginProtocol(window.location.protocol);
-  const wsProtocol = toWsProtocol(window.location.protocol);
-  state.backendHttpOrigin = `${httpProtocol}//${host}:${port}`;
-  state.backendWsOrigin = `${wsProtocol}//${host}:${port}`;
-}
-
 function resolveWsUrl(sessionId) {
-  const wsBase = String(state.backendWsOrigin || "").trim();
-  if (wsBase) {
-    return `${wsBase}/ws?sessionId=${encodeURIComponent(sessionId)}`;
-  }
   const protocol = toWsProtocol(window.location.protocol);
   return `${protocol}//${window.location.host}/ws?sessionId=${encodeURIComponent(sessionId)}`;
 }
 
 async function bootstrapWorkspace({ includeSessions = true } = {}) {
-  const configPayload = await request("/api/config");
-  applyBackendConfig(configPayload);
   if (includeSessions) {
     await refreshSessions();
   }

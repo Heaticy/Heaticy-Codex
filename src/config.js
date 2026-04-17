@@ -2,7 +2,6 @@ import "dotenv/config";
 
 import crypto from "node:crypto";
 import os from "node:os";
-import path from "node:path";
 import process from "node:process";
 
 function env(name, fallback = "") {
@@ -32,20 +31,7 @@ function listEnv(name) {
     .filter(Boolean);
 }
 
-function hasEnv(name) {
-  const value = process.env[name];
-  return value !== undefined && value !== null && String(value).trim() !== "";
-}
-
 function inferShellBin() {
-  if (hasEnv("POWERSHELL_BIN")) {
-    return env("POWERSHELL_BIN");
-  }
-
-  if (process.platform === "win32") {
-    return "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe";
-  }
-
   if (process.platform === "darwin") {
     return env("SHELL", "/bin/zsh");
   }
@@ -53,44 +39,31 @@ function inferShellBin() {
   return env("SHELL", "/bin/bash");
 }
 
-function isPowerShellExecutable(shellBin) {
-  const baseName = path.basename(String(shellBin || "")).toLowerCase();
-  return baseName === "pwsh" || baseName === "pwsh.exe" || baseName === "powershell.exe";
-}
-
-function inferShellArgs(shellBin) {
-  if (isPowerShellExecutable(shellBin)) {
-    return ["-NoLogo"];
-  }
-
-  if (process.platform === "win32") {
-    return [];
-  }
-
+function inferShellArgs() {
   return ["-l"];
 }
 
-function inferShellQuoteStyle(shellBin) {
-  return isPowerShellExecutable(shellBin) ? "powershell" : "posix";
+function inferShellQuoteStyle() {
+  return "posix";
 }
 
 const root = process.cwd();
-const home = process.env.USERPROFILE || process.env.HOME || os.homedir();
+const home = process.env.HOME || os.homedir();
 const generatedToken = crypto.randomBytes(18).toString("base64url");
 const shellBin = env("SHELL_BIN", inferShellBin());
-const shellArgs = hasEnv("SHELL_ARGS") ? listEnv("SHELL_ARGS") : inferShellArgs(shellBin);
+const shellArgs = env("SHELL_ARGS") ? listEnv("SHELL_ARGS") : inferShellArgs();
 
 export const config = {
   root,
   home,
   platform: process.platform,
   host: env("HOST", "0.0.0.0"),
-  port: intEnv("PORT", 3210),
+  port: intEnv("PORT", 3211),
   accessToken: env("ACCESS_TOKEN", generatedToken),
   defaultCwd: env("DEFAULT_CWD", home),
   shellBin,
   shellArgs,
-  shellQuoteStyle: env("SHELL_QUOTE_STYLE", inferShellQuoteStyle(shellBin)),
+  shellQuoteStyle: env("SHELL_QUOTE_STYLE", inferShellQuoteStyle()),
   codexBin: env("CODEX_BIN", "codex"),
   codexModel: env("CODEX_MODEL", ""),
   codexModels: listEnv("CODEX_MODELS"),
@@ -113,7 +86,6 @@ export const config = {
   authRateLimitWindowMs: intEnv("AUTH_RATE_LIMIT_WINDOW_MINUTES", 10) * 60 * 1000,
   authRateLimitMaxAttempts: intEnv("AUTH_RATE_LIMIT_MAX_ATTEMPTS", 5),
   authRateLimitBlockMs: intEnv("AUTH_RATE_LIMIT_BLOCK_MINUTES", 15) * 60 * 1000,
-  tailscaleOnly: boolEnv("TAILSCALE_ONLY", false),
   trustedCidrs: listEnv("TRUSTED_CIDRS"),
   wsHeartbeatMs: intEnv("WS_HEARTBEAT_SECONDS", 30) * 1000,
   sessionBufferLimit: 250000,

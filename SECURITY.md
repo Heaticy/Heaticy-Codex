@@ -16,6 +16,5 @@ We will acknowledge receipt and provide a remediation timeline.
 ## Deployment Notes
 
 - Always set a strong `ACCESS_TOKEN`.
-- For private deployments, prefer `TAILSCALE_ONLY=true` or strict `TRUSTED_CIDRS`.
+- For private deployments, prefer strict `TRUSTED_CIDRS` and keep the service behind your own network controls.
 - Do not expose this service publicly without additional authentication and network controls.
-

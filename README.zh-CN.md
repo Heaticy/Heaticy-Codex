@@ -17,7 +17,6 @@
 
 - Node.js 22+
 - 已安装 `codex` 命令并可在终端直接运行
-- 如果要外网访问：电脑和手机都要安装 Tailscale，并登录同一账号
 
 ## 1 分钟本地跑起来
 
@@ -27,9 +26,9 @@ cd codex-cc-web-terminal
 npm run setup
 ```
 
-`npm run setup` 会交互式引导你完成：`.env` 配置、可选 Tailscale、安装依赖、启动服务。
+`npm run setup` 会交互式引导你完成：`.env` 配置、安装依赖、启动服务。
 
-或手动执行（macOS / Linux）：
+或手动执行：
 
 ```bash
 cd codex-cc-web-terminal
@@ -39,46 +38,18 @@ npm install
 npm run dev:up
 ```
 
-Windows（PowerShell / CMD）请改用：
-
-```bash
-npm install
-npm run dev
-```
-
 打开：
 
-- 前端（推荐）：`http://127.0.0.1:5173/#/sessions`
-- 后端直连：`http://127.0.0.1:3210`（如果你改了 `PORT`，这里用对应端口）
+- 前端（推荐）：`http://127.0.0.1:<WEB_PORT>/#/sessions`
+- 后端直连：`http://127.0.0.1:<PORT>`
 
-## 手机访问（两种）
+## 手机访问
 
 ### A. 同一 Wi-Fi
 
 1. `.env` 确认：`HOST=0.0.0.0`
-2. 手机打开：`http://你的电脑局域网IP:3210`
+2. 手机打开：`http://你的电脑局域网IP:3211`
 3. 用 `ACCESS_TOKEN` 登录
-
-### B. Tailscale（外网推荐）
-
-这条路径的前提：电脑和手机都安装 Tailscale，并登录同一账号。
-
-1. 电脑安装并登录 [Tailscale](https://tailscale.com/download)
-2. 安卓/iOS 安装 Tailscale App，并登录同一账号
-3. 电脑执行：
-
-```bash
-tailscale status
-tailscale ip -4
-```
-
-4. 手机打开：`http://电脑的100.x.x.x:3210`
-
-建议 `.env` 打开：
-
-```env
-TAILSCALE_ONLY=true
-```
 
 ## 部署（PM2）
 
@@ -91,7 +62,7 @@ npm run service:logs
 ## 最常用命令
 
 ```bash
-npm run dev            # 跨平台开发模式（前后端前台运行）
+npm run dev            # 开发模式（前后端前台运行）
 npm run dev:up         # 仅 macOS/Linux：后台启动开发服务
 npm run dev:down       # 仅 macOS/Linux：停止后台开发进程
 npm run check          # 快速自检
@@ -102,20 +73,20 @@ npm run check          # 快速自检
 1. `Cross-origin request rejected`
 - 优先用 `npm run dev`（macOS/Linux 也可用 `npm run dev:up`）启动，不要手动拆开前后端起。
 
-2. `5173` 打不开
+2. 前端端口打不开
 - 先执行 `npm run dev`，再看端口：
 ```bash
 # macOS/Linux
-lsof -iTCP:5173 -sTCP:LISTEN -n -P
+lsof -iTCP:<WEB_PORT> -sTCP:LISTEN -n -P
 
-# Windows
-netstat -ano | findstr :5173
 ```
 
 3. 手机提示“电脑未连接”
 - 先确认电脑服务在线：`npm run service:status`
-- 再确认网络路径正确：同 Wi-Fi 或同 Tailnet
+- 再确认网络路径正确：同 Wi-Fi，或你自己已经配置好的其他网络路径
 - 如果你改过 `PORT`，手机访问地址也要用同一个端口。
+- `npm run setup` 现在会把 `PORT` 和 `WEB_PORT` 一起写进 `.env`。
+- 也可以临时覆盖：`WEB_PORT=xxxx PORT=yyyy npm run dev` 或 `npm run dev:up`。
 
 ## 开源说明
 

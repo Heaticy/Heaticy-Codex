@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Browser-based multi-session Codex terminal for Windows and macOS.",
+  "description": "Browser-based multi-session Codex terminal for macOS and Linux.",
   "scripts": {
     "setup": "node ./scripts/setup.mjs",
     "start": "node ./src/server.js",

@@ -40,22 +40,10 @@ function quotePosix(value) {
   return `'${String(value || "").replace(/'/g, "'\\''")}'`;
 }
 
-function quotePowerShell(value) {
-  return `'${String(value || "").replace(/'/g, "''")}'`;
-}
-
 function buildShellCommand(parts, quoteStyle) {
   const values = parts.filter((part) => String(part || "").length > 0);
   if (values.length === 0) {
     return "";
-  }
-
-  if (quoteStyle === "powershell") {
-    const [command, ...args] = values;
-    const quotedArgs = args.map((arg) => quotePowerShell(arg)).join(" ");
-    return quotedArgs
-      ? `& ${quotePowerShell(command)} ${quotedArgs}`
-      : `& ${quotePowerShell(command)}`;
   }
 
   return values.map((part) => quotePosix(part)).join(" ");

@@ -9,7 +9,7 @@ const root = path.join(__dirname, "..");
 const logsDir = path.join(root, "logs");
 const pm2Script = path.join(root, "node_modules", "pm2", "bin", "pm2");
 const ecosystemFile = path.join(root, "ecosystem.config.cjs");
-const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+const npmCommand = "npm";
 const appNames = {
   prod: "codex-cc-web-terminal",
   dev: "codex-cc-web-terminal-dev"
@@ -24,7 +24,7 @@ function parseArgs(argv) {
   const options = {
     action: "status",
     mode: "prod",
-    healthPort: 3210,
+    healthPort: 3211,
     healthTimeoutSeconds: 30,
     logLines: 120,
     forceStart: false,

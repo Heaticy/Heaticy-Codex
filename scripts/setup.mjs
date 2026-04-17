@@ -1,27 +1,18 @@
 #!/usr/bin/env node
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
-import { execSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 
 const rl = createInterface({ input, output });
 const projectRoot = process.cwd();
 const envExamplePath = path.join(projectRoot, '.env.example');
 const envPath = path.join(projectRoot, '.env');
-const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const npmCommand = 'npm';
 
 function logStep(title) {
   output.write(`\n=== ${title} ===\n`);
-}
-
-function safeExec(command) {
-  try {
-    return execSync(command, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
-  } catch {
-    return '';
-  }
 }
 
 function askYesNo(question, defaultYes = true) {
@@ -71,13 +62,13 @@ async function main() {
   const nodeVersion = process.version;
   output.write(`Node: ${nodeVersion}\n`);
 
-  const codexVersion = safeExec('codex --version');
-  if (!codexVersion) {
+  const codexVersion = spawnSync('codex', ['--version'], { encoding: 'utf8' });
+  if (codexVersion.status !== 0 || !codexVersion.stdout.trim()) {
     output.write('未检测到 codex 命令。请先安装 codex，再执行 npm run setup。\n');
     await rl.close();
     process.exit(1);
   }
-  output.write(`Codex: ${codexVersion}\n`);
+  output.write(`Codex: ${codexVersion.stdout.trim()}\n`);
 
   logStep('读取配置模板');
   if (!existsSync(envExamplePath)) {
@@ -98,12 +89,19 @@ async function main() {
   }
 
   logStep('交互式配置');
-  const currentPort = base.get('PORT') || '3210';
+  const currentPort = base.get('PORT') || '3211';
   let port = await askWithDefault('服务端口 PORT', currentPort);
   while (!validPort(port)) {
     port = await askWithDefault('端口无效，请输入 1-65535 的整数端口', currentPort);
   }
   base.set('PORT', port);
+
+  const currentWebPort = base.get('WEB_PORT') || '5206';
+  let webPort = await askWithDefault('前端端口 WEB_PORT', currentWebPort);
+  while (!validPort(webPort)) {
+    webPort = await askWithDefault('端口无效，请输入 1-65535 的整数端口', currentWebPort);
+  }
+  base.set('WEB_PORT', webPort);
 
   const tokenHint = base.get('ACCESS_TOKEN') && base.get('ACCESS_TOKEN') !== 'change-me' ? '保持当前' : '请输入';
   let token = await rl.question(`访问令牌 ACCESS_TOKEN（${tokenHint}）: `);
@@ -116,8 +114,8 @@ async function main() {
   const host = await askWithDefault('监听地址 HOST', base.get('HOST') || '0.0.0.0');
   base.set('HOST', host);
 
-  const tailscaleOnly = await askYesNo('是否仅允许本机 + Tailscale 访问（TAILSCALE_ONLY）？', String(base.get('TAILSCALE_ONLY')).toLowerCase() === 'true');
-  base.set('TAILSCALE_ONLY', tailscaleOnly ? 'true' : 'false');
+  const trustedCidrs = await askWithDefault('允许访问的网段 TRUSTED_CIDRS（逗号分隔，可留空）', base.get('TRUSTED_CIDRS') || '');
+  base.set('TRUSTED_CIDRS', trustedCidrs);
 
   const timezone = await askWithDefault('展示时区 DISPLAY_TIMEZONE', base.get('DISPLAY_TIMEZONE') || 'Asia/Shanghai');
   base.set('DISPLAY_TIMEZONE', timezone);
@@ -128,27 +126,6 @@ async function main() {
   logStep('写入 .env');
   writeFileSync(envPath, toEnvContent(base), 'utf8');
   output.write(`已写入: ${envPath}\n`);
-
-  if (tailscaleOnly) {
-    logStep('Tailscale 提示');
-    const status = safeExec('tailscale status');
-    if (status) {
-      const tsIp = safeExec('tailscale ip -4');
-      output.write('检测到 Tailscale 在线。\n');
-      if (tsIp) output.write(`手机访问可用地址: http://${tsIp}:${port}\n`);
-    } else {
-      output.write('尚未检测到 Tailscale 在线。\n');
-      const platform = os.platform();
-      if (platform === 'darwin') {
-        output.write('macOS 可执行: brew install --cask tailscale\n');
-      } else if (platform === 'linux') {
-        output.write('Linux 请参考: https://tailscale.com/download/linux\n');
-      } else if (platform === 'win32') {
-        output.write('Windows 请安装: https://tailscale.com/download/windows\n');
-      }
-      output.write('安装后登录同一账号，再执行 tailscale up。\n');
-    }
-  }
 
   const installDeps = await askYesNo('现在安装依赖（npm install）？', true);
   if (installDeps) {
@@ -161,7 +138,7 @@ async function main() {
     }
   }
 
-  const startScript = process.platform === 'win32' ? 'dev' : 'dev:up';
+  const startScript = 'dev:up';
   const startNow = await askYesNo(`现在启动开发服务（npm run ${startScript}）？`, true);
   if (startNow) {
     logStep('启动服务');
@@ -175,13 +152,9 @@ async function main() {
 
   logStep('完成');
   output.write('配置完成。\n');
-  output.write(`前端: http://127.0.0.1:5173/#/sessions\n`);
+  output.write(`前端: http://127.0.0.1:${webPort}/#/sessions\n`);
   output.write(`后端: http://127.0.0.1:${port}\n`);
-  if (process.platform === 'win32') {
-    output.write('Windows 建议使用 npm run dev 前台运行并直接查看终端输出日志。\n');
-  } else {
-    output.write('如需查看日志: tail -f /tmp/codex-server-dev.log /tmp/codex-web-dev.log\n');
-  }
+  output.write('如需查看日志: tail -f /tmp/codex-server-dev.log /tmp/codex-web-dev.log\n');
 
   await rl.close();
 }

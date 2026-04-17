@@ -150,7 +150,6 @@ export function createKoaApp({ config, sessionManager }) {
     }
     return ((parts[0] << 24) >>> 0) + (parts[1] << 16) + (parts[2] << 8) + parts[3];
   };
-  runtime.isTailscaleIpv6 = (address) => runtime.normalizeIp(address).toLowerCase().startsWith("fd7a:115c:a1e0:");
   runtime.cidrContains = (cidr, address) => {
     const [baseAddress, prefixText] = String(cidr || "").split("/");
     const prefix = Number.parseInt(prefixText, 10);
@@ -163,11 +162,7 @@ export function createKoaApp({ config, sessionManager }) {
     return (baseInt & mask) === (targetInt & mask);
   };
   runtime.getAllowedCidrs = () => {
-    const cidrs = [...runtime.config.trustedCidrs];
-    if (runtime.config.tailscaleOnly) {
-      cidrs.push("100.64.0.0/10", "127.0.0.0/8");
-    }
-    return cidrs;
+    return [...runtime.config.trustedCidrs];
   };
   runtime.isAllowedClient = (req) => {
     const cidrs = runtime.getAllowedCidrs();
@@ -175,9 +170,6 @@ export function createKoaApp({ config, sessionManager }) {
       return true;
     }
     const clientIp = runtime.getClientAddress(req);
-    if (runtime.config.tailscaleOnly && runtime.isTailscaleIpv6(clientIp)) {
-      return true;
-    }
     return cidrs.some((cidr) => runtime.cidrContains(cidr, clientIp));
   };
   runtime.isTrustedOrigin = (req) => {

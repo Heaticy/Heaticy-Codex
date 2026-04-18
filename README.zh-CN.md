@@ -2,9 +2,9 @@
 
 [English](./README.md) | 简体中文
 
-只做一件事：把你电脑上的 `codex` 会话放到浏览器（含手机）里，以 heaticy 的工作流方式来使用。
+只做一件事：把你电脑上的 `codex` 会话放到浏览器（含手机）里用。
 
-这个仓库是一个面向 heaticy 场景维护的开源 fork，在原有 Codex Web Terminal 基础上做了重命名，并针对局域网与反向代理部署进行了调整。
+这个仓库是一个由 heaticy 维护和命名的开源 fork，基于原有 Codex Web Terminal 做了重命名，并针对局域网与反向代理部署进行了调整。
 
 当前仅支持 **Codex**。
 
@@ -92,7 +92,7 @@ lsof -iTCP:<WEB_PORT> -sTCP:LISTEN -n -P
 
 ## 开源说明
 
-- 这是一个为 heaticy 工作流定制维护的开源 fork
+- 这是一个由 heaticy 维护的开源 fork
 - [LICENSE](./LICENSE)
 - [CONTRIBUTING.md](./CONTRIBUTING.md)
 - [SECURITY.md](./SECURITY.md)

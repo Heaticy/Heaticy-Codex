@@ -2,9 +2,9 @@
 
 English | [简体中文](./README.zh-CN.md)
 
-One thing only: use local `codex` sessions in your browser under the heaticy workspace flow.
+One thing only: use local `codex` sessions in your browser.
 
-This repository is a heaticy-maintained fork of an open source Codex web terminal project, renamed and adapted for LAN and reverse-proxy deployment.
+This repository is a fork of an open source Codex web terminal project, renamed and maintained by heaticy, with adjustments for LAN and reverse-proxy deployment.
 
 Currently supports **Codex** only.
 
@@ -92,7 +92,7 @@ lsof -iTCP:<WEB_PORT> -sTCP:LISTEN -n -P
 
 ## Open Source
 
-- Forked and customized for the heaticy workflow
+- Forked and maintained by heaticy
 - [LICENSE](./LICENSE)
 - [CONTRIBUTING.md](./CONTRIBUTING.md)
 - [SECURITY.md](./SECURITY.md)

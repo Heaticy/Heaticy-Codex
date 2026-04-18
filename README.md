@@ -1,16 +1,18 @@
-# Codex Web Terminal
+# Heaticy Codex
 
 English | [简体中文](./README.zh-CN.md)
 
-One thing only: use local `codex` sessions in your browser (including mobile).
+One thing only: use local `codex` sessions in your browser under the heaticy workspace flow.
+
+This repository is a heaticy-maintained fork of an open source Codex web terminal project, renamed and adapted for LAN and reverse-proxy deployment.
 
 Currently supports **Codex** only.
 
 ## Screenshots
 
 <p align="center">
-  <img src="./docs/images/codex-web-terminal.jpg" alt="Codex Web Terminal mobile screenshot 1" width="280" />
-  <img src="./docs/images/codex-web-terminal2.jpg" alt="Codex Web Terminal mobile screenshot 2" width="280" />
+  <img src="./docs/images/codex-web-terminal.jpg" alt="Heaticy Codex mobile screenshot 1" width="280" />
+  <img src="./docs/images/codex-web-terminal2.jpg" alt="Heaticy Codex mobile screenshot 2" width="280" />
 </p>
 
 ## Prerequisites
@@ -21,8 +23,8 @@ Currently supports **Codex** only.
 ## Quick Start (1 minute)
 
 ```bash
-git clone https://github.com/SZZH/codex-cc-web-terminal.git
-cd codex-cc-web-terminal
+git clone https://github.com/SZZH/heaticy-codex.git
+cd heaticy-codex
 npm run setup
 ```
 
@@ -31,7 +33,7 @@ npm run setup
 Or run manually:
 
 ```bash
-cd codex-cc-web-terminal
+cd heaticy-codex
 cp .env.example .env
 # Set your own ACCESS_TOKEN in .env
 npm install
@@ -90,6 +92,7 @@ lsof -iTCP:<WEB_PORT> -sTCP:LISTEN -n -P
 
 ## Open Source
 
+- Forked and customized for the heaticy workflow
 - [LICENSE](./LICENSE)
 - [CONTRIBUTING.md](./CONTRIBUTING.md)
 - [SECURITY.md](./SECURITY.md)

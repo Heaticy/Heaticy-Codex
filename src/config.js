@@ -2,6 +2,7 @@ import "dotenv/config";
 
 import crypto from "node:crypto";
 import os from "node:os";
+import path from "node:path";
 import process from "node:process";
 
 function env(name, fallback = "") {
@@ -80,7 +81,7 @@ export const config = {
   ccModels: listEnv("CC_MODELS"),
   ccFullAccess: boolEnv("CC_FULL_ACCESS", true),
   ccExtraArgs: listEnv("CC_EXTRA_ARGS"),
-  authSessionCookieName: env("AUTH_SESSION_COOKIE_NAME", "codex_web_term_session"),
+  authSessionCookieName: env("AUTH_SESSION_COOKIE_NAME", "heaticy_codex_session"),
   authSessionTtlMs: intEnv("AUTH_SESSION_TTL_HOURS", 24) * 60 * 60 * 1000,
   secureCookies: boolEnv("SECURE_COOKIES", false),
   authRateLimitWindowMs: intEnv("AUTH_RATE_LIMIT_WINDOW_MINUTES", 10) * 60 * 1000,

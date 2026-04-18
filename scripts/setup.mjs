@@ -55,7 +55,7 @@ function validPort(value) {
 }
 
 async function main() {
-  output.write('Codex Web Terminal 一键安装向导\n');
+  output.write('Heaticy Codex 一键安装向导\n');
   output.write(`目录: ${projectRoot}\n`);
 
   logStep('环境检查');

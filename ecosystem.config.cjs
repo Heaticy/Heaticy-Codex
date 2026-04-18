@@ -27,12 +27,12 @@ module.exports = {
   apps: [
     {
       ...shared,
-      name: "codex-cc-web-terminal",
+      name: "heaticy-codex",
       watch: false
     },
     {
       ...shared,
-      name: "codex-cc-web-terminal-dev",
+      name: "heaticy-codex-dev",
       watch: [path.join(root, "src"), path.join(root, "web"), path.join(root, ".env")],
       ignore_watch: [
         path.join(root, "data"),

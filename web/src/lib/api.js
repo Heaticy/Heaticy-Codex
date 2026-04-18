@@ -23,7 +23,7 @@ export async function request(url, options = {}, attempt = 0) {
   return response.json();
 }
 
-const TOKEN_STORAGE_KEY = "codex-web-terminal.saved-token";
+const TOKEN_STORAGE_KEY = "heaticy-codex.saved-token";
 
 async function retryLoginFromSavedToken() {
   if (typeof window === "undefined") {

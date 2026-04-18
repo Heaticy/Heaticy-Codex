@@ -43,7 +43,7 @@ async function shutdown(signal = "unknown") {
 
 server.listen(config.port, config.host, () => {
   const displayHost = config.host === "0.0.0.0" ? "localhost" : config.host;
-  console.log(`Codex/CC Web Terminal listening on http://${displayHost}:${config.port}`);
+  console.log(`Heaticy Codex listening on http://${displayHost}:${config.port}`);
   console.log("Authentication: session cookie enabled");
 });
 

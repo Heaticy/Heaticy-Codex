@@ -45,8 +45,8 @@ export class AppServerBridge extends EventEmitter {
     await this.openWebSocket();
     await this.request("initialize", {
       clientInfo: {
-        name: "codex-cc-web-terminal",
-        title: "Codex CC Web Terminal",
+        name: "heaticy-codex",
+        title: "Heaticy Codex",
         version: "0.1.0"
       },
       capabilities: {

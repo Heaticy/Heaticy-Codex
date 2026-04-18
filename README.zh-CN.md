@@ -1,16 +1,18 @@
-# Codex Web Terminal
+# Heaticy Codex
 
 [English](./README.md) | 简体中文
 
-只做一件事：把你电脑上的 `codex` 会话放到浏览器（含手机）里用。
+只做一件事：把你电脑上的 `codex` 会话放到浏览器（含手机）里，以 heaticy 的工作流方式来使用。
+
+这个仓库是一个面向 heaticy 场景维护的开源 fork，在原有 Codex Web Terminal 基础上做了重命名，并针对局域网与反向代理部署进行了调整。
 
 当前仅支持 **Codex**。
 
 ## 示例截图
 
 <p align="center">
-  <img src="./docs/images/codex-web-terminal.jpg" alt="Codex Web Terminal 手机界面截图 1" width="280" />
-  <img src="./docs/images/codex-web-terminal2.jpg" alt="Codex Web Terminal 手机界面截图 2" width="280" />
+  <img src="./docs/images/codex-web-terminal.jpg" alt="Heaticy Codex 手机界面截图 1" width="280" />
+  <img src="./docs/images/codex-web-terminal2.jpg" alt="Heaticy Codex 手机界面截图 2" width="280" />
 </p>
 
 ## 前置依赖
@@ -21,8 +23,8 @@
 ## 1 分钟本地跑起来
 
 ```bash
-git clone https://github.com/SZZH/codex-cc-web-terminal.git
-cd codex-cc-web-terminal
+git clone https://github.com/SZZH/heaticy-codex.git
+cd heaticy-codex
 npm run setup
 ```
 
@@ -31,7 +33,7 @@ npm run setup
 或手动执行：
 
 ```bash
-cd codex-cc-web-terminal
+cd heaticy-codex
 cp .env.example .env
 # 把 .env 里的 ACCESS_TOKEN 改成你自己的
 npm install
@@ -90,6 +92,7 @@ lsof -iTCP:<WEB_PORT> -sTCP:LISTEN -n -P
 
 ## 开源说明
 
+- 这是一个为 heaticy 工作流定制维护的开源 fork
 - [LICENSE](./LICENSE)
 - [CONTRIBUTING.md](./CONTRIBUTING.md)
 - [SECURITY.md](./SECURITY.md)

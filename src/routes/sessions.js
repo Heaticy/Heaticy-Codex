@@ -109,7 +109,12 @@ export async function handleSessionRoute(ctx, runtime) {
     }
 
     const id = ctx.path.split("/").at(-1);
-    runtime.json(ctx, 200, { ok: runtime.sessionManager.close(id) });
+    const body = runtime.parseJson(await runtime.readBody(ctx.req));
+    runtime.json(ctx, 200, {
+      ok: runtime.sessionManager.deleteSession(id, {
+        deleteHistory: Boolean(body.deleteHistory)
+      })
+    });
     return true;
   }
 

@@ -23,7 +23,7 @@ const props = defineProps({
   statusText: { type: String, default: "" }
 });
 
-const emit = defineEmits(["back", "update:draft", "submit", "interrupt"]);
+const emit = defineEmits(["back", "update:draft", "submit", "interrupt", "create-sibling-session", "delete-session"]);
 const messageListEl = ref(null);
 const composerEl = ref(null);
 const viewportHeight = ref(0);
@@ -376,7 +376,14 @@ onBeforeUnmount(() => {
       <div class="header-copy">
         <h1>{{ title }}</h1>
       </div>
-      <span class="header-spacer" aria-hidden="true"></span>
+      <div class="header-actions">
+        <button class="header-action" type="button" aria-label="在当前目录新建会话" @click="emit('create-sibling-session')">
+          新建
+        </button>
+        <button class="header-action danger" type="button" aria-label="删除当前会话" @click="emit('delete-session')">
+          删除
+        </button>
+      </div>
     </header>
 
     <main class="chat-screen">
@@ -452,7 +459,7 @@ onBeforeUnmount(() => {
   top: 0;
   z-index: 10;
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) 32px;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   padding: calc(env(safe-area-inset-top) + 10px) 14px 10px;
@@ -512,9 +519,28 @@ onBeforeUnmount(() => {
   transform: translateX(-1px);
 }
 
-.header-spacer {
-  width: 32px;
-  height: 32px;
+.header-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.header-action {
+  border: 0;
+  border-radius: 999px;
+  background: rgba(229, 220, 212, 0.9);
+  color: #56483d;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 700;
+  padding: 9px 10px;
+  cursor: pointer;
+}
+
+.header-action.danger {
+  background: rgba(182, 89, 79, 0.12);
+  color: #9f4139;
 }
 
 .chat-screen {

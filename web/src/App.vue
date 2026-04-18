@@ -988,6 +988,72 @@ async function createSessionInGroup(group) {
   }
 }
 
+async function createSessionFromCurrentWorkspace() {
+  const cwd = String(state.activeSessionMeta?.cwd || "").trim();
+  if (!cwd) {
+    setStatus("当前会话目录不可用，无法新增会话。");
+    return;
+  }
+
+  await backToList();
+  await createSessionInGroup({ cwd });
+}
+
+async function deleteSessionItem(session) {
+  if (!session) {
+    return;
+  }
+
+  const label = String(session.displayTitle || session.name || "该会话").trim() || "该会话";
+  const confirmed = typeof window === "undefined" ? true : window.confirm(`确定删除“${label}”吗？此操作不可撤销。`);
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    state.pendingSessionId = session.id;
+    setStatus("正在删除会话…");
+
+    if (session.kind === "history") {
+      await request("/api/history-sessions", {
+        method: "DELETE",
+        body: JSON.stringify({
+          provider: session.provider,
+          resumeSessionId: session.resumeSessionId
+        })
+      });
+    } else {
+      await request(`/api/sessions/${encodeURIComponent(session.id)}`, {
+        method: "DELETE",
+        body: JSON.stringify({
+          deleteHistory: Boolean(session.resumeSessionId)
+        })
+      });
+    }
+
+    delete sessionCache[cacheKey(session)];
+    state.sessions = state.sessions.filter((item) => item.id !== session.id);
+
+    if (state.activeSessionId === session.id) {
+      closeSocket();
+      finalizeAssistantStream();
+      state.activeSessionId = "";
+      state.activeLiveSessionId = "";
+      state.activeSessionMeta = null;
+      state.activeMessages = [];
+      composerDraft.value = "";
+      await router.replace({ name: "sessions" });
+    }
+
+    await refreshSessions();
+    setStatus("会话已删除。");
+  } catch (error) {
+    setStatus(error?.message || String(error));
+  } finally {
+    state.pendingSessionId = "";
+  }
+}
+
 async function ensureLiveSession() {
   if (state.activeLiveSessionId && state.activeSocket && state.activeSocket.readyState === WebSocket.OPEN) {
     return state.activeLiveSessionId;
@@ -1310,6 +1376,7 @@ if (typeof window !== 'undefined') {
           :format-relative-time="formatRelativeTime"
           @open="openSessionItem"
           @create-group-session="createSessionInGroup"
+          @delete-session="deleteSessionItem"
         />
 
         <div v-if="state.statusText" class="notice-strip">{{ state.statusText }}</div>
@@ -1333,6 +1400,8 @@ if (typeof window !== 'undefined') {
         :status-text="state.statusText"
         @back="backToList"
         @interrupt="interruptActiveSession"
+        @create-sibling-session="createSessionFromCurrentWorkspace"
+        @delete-session="deleteSessionItem(state.activeSessionMeta)"
         @submit="submitInput"
       />
 

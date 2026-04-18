@@ -8,7 +8,7 @@ const props = defineProps({
   formatRelativeTime: { type: Function, required: true }
 });
 
-const emit = defineEmits(["open", "create-group-session"]);
+const emit = defineEmits(["open", "create-group-session", "delete-session"]);
 const expandedGroups = ref(new Set());
 const openMenuGroupName = ref("");
 const openMenuPoint = ref({ x: 0, y: 0 });
@@ -118,6 +118,11 @@ function createGroupSession(group) {
   emit("create-group-session", group);
 }
 
+function deleteSession(session) {
+  closeMenu();
+  emit("delete-session", session);
+}
+
 function menuStyle() {
   const viewportWidth = typeof window !== "undefined" ? window.innerWidth : 390;
   const x = Number(openMenuPoint.value?.x || 0);
@@ -179,6 +184,14 @@ onBeforeUnmount(() => {
               <p class="session-row-title">{{ session.displayTitle }}</p>
               <time class="session-row-time">{{ formatRelativeTime(session.updatedAt) }}</time>
             </div>
+            <button
+              type="button"
+              class="session-row-delete"
+              aria-label="删除会话"
+              @click.stop="deleteSession(session)"
+            >
+              删除
+            </button>
           </button>
         </div>
       </section>
@@ -410,7 +423,10 @@ onBeforeUnmount(() => {
 }
 
 .session-row {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   width: 100%;
   padding: 10px 12px 10px 12px;
   border: 1px solid transparent;
@@ -487,6 +503,23 @@ onBeforeUnmount(() => {
 
 .session-row.active .session-row-title {
   color: rgb(97, 81, 66);
+}
+
+.session-row-delete {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(182, 89, 79, 0.1);
+  color: #9f4139;
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 700;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.session-row-delete:active {
+  background: rgba(182, 89, 79, 0.18);
 }
 
 .empty-state {

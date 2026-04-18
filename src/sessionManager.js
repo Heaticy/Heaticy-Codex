@@ -1798,6 +1798,7 @@ export class SessionManager {
 
     for (const session of targets) {
       session.updatedAt = nowIso();
+      const itemType = String(params?.item?.type || "").trim();
       if (method === "item/agentMessage/delta" || normalizedMethod === "itemagentmessagedelta") {
         const delta = String(params?.delta || "");
         if (!delta.trim()) {
@@ -1817,10 +1818,16 @@ export class SessionManager {
       if (method === "item/completed" || normalizedMethod === "itemcompleted") {
         const item = params?.item || {};
         if (!isAgentMessageType(item?.type)) {
+          console.warn(
+            `[app-server] ignored completed item session=${session.id} thread=${threadId} itemType=${itemType || "unknown"}`
+          );
           continue;
         }
         const text = String(item?.text || "").trim();
         if (!text) {
+          console.warn(
+            `[app-server] empty completed agent message session=${session.id} thread=${threadId}`
+          );
           continue;
         }
         session.turnHadVisibleOutput = true;
@@ -1835,14 +1842,21 @@ export class SessionManager {
         continue;
       }
       if (method === "turn/completed" || normalizedMethod === "turncompleted") {
-        if (!session.turnHadVisibleOutput) {
+        if (session.turnRunning && !session.turnHadVisibleOutput) {
+          console.warn(
+            `[app-server] turn completed without visible output session=${session.id} thread=${threadId}`
+          );
           emitNoReplyFallback(this, session);
         }
         continue;
       }
       if (method === "thread/status/changed" || normalizedMethod === "threadstatuschanged") {
         this.broadcast(session, { type: "session_updated", session: this.serialize(session) });
+        continue;
       }
+      console.warn(
+        `[app-server] unhandled notification session=${session.id} thread=${threadId} method=${method || "unknown"} itemType=${itemType || "none"}`
+      );
     }
   }
 
@@ -1917,6 +1931,27 @@ export class SessionManager {
     }
     this.sessions.delete(id);
     return true;
+  }
+
+  deleteSession(id, { deleteHistory = false } = {}) {
+    const session = this.get(id);
+    if (!session) {
+      return false;
+    }
+
+    const providerId = String(session.provider || "").trim();
+    const resumeSessionId = String(session.resumeSessionId || "").trim();
+    const closed = this.close(id);
+
+    if (deleteHistory && providerId && resumeSessionId) {
+      try {
+        this.deleteHistoricalSession(providerId, resumeSessionId);
+      } catch {
+        // Keep live-session deletion successful even if historical cleanup fails.
+      }
+    }
+
+    return closed;
   }
 
   shutdown() {

@@ -152,6 +152,30 @@ function compactNoiseKey(value) {
   return collapseDoubledAscii(compactLine(value)).toLowerCase();
 }
 
+function stripSourceLineNumber(value) {
+  return String(value || "").trim().replace(/^\d{1,6}\s+/, "").trim();
+}
+
+function isSourceLikeLine(value) {
+  const raw = String(value || "").trim();
+  const text = stripSourceLineNumber(raw);
+  if (!text) {
+    return true;
+  }
+
+  return (
+    /^\d{1,6}$/.test(raw) ||
+    /^\d{1,6}\s+\S/.test(raw) ||
+    /^(import|export|const|let|var|function|async function|class|return|await|try|catch|finally|if|else|for|while|switch|case|break|continue)\b/.test(text) ||
+    /^(onMounted|onBeforeUnmount|watch|computed|ref|reactive|nextTick)\b/.test(text) ||
+    /^(window|document|state|router|route|socket|ws)\.[A-Za-z_$]/.test(text) ||
+    /^[{}()[\];,]+$/.test(text) ||
+    /^\}\s*(catch|finally|else|\)|,|;)?/.test(text) ||
+    /=>\s*\{?$/.test(text) ||
+    /\b(addEventListener|removeEventListener|setTimeout|clearTimeout|JSON\.parse|JSON\.stringify|send\(|close\(|replace\(|push\()/.test(text)
+  );
+}
+
 function isProcessNoiseLine(value) {
   const text = compactNoiseKey(value);
   if (!text) {
@@ -159,6 +183,7 @@ function isProcessNoiseLine(value) {
   }
 
   return (
+    isSourceLikeLine(value) ||
     /^working\(/.test(text) ||
     /esc to interrupt/.test(text) ||
     /^thinking\b/.test(text) ||
@@ -191,19 +216,41 @@ function isProcessNoiseLine(value) {
   );
 }
 
-export function cleanVisibleChatText(value) {
-  const lines = normalizeLine(value)
+function cleanVisibleLines(value) {
+  const rawLines = normalizeLine(value)
     .split("\n")
     .map((line) => collapseDoubledAscii(line).trimEnd())
-    .filter(Boolean)
-    .filter((line) => !isProcessNoiseLine(line))
-    .filter((line) => !isInstructionLike(line))
-    .filter((line) => !isHistoricalMetaLine(line))
-    .filter((line) => !/^<.*>$/.test(line.trim()))
-    .filter((line) => !/^\{.*"(?:cmd|command|workdir|agent_path|tool)".*\}$/.test(line.trim()))
-    .filter((line) => !/^\[.*\]$/.test(line.trim()));
+    .filter(Boolean);
+  const visible = [];
+  let sourceRun = 0;
 
-  return lines.join("\n").trim();
+  for (const line of rawLines) {
+    const sourceLike = isSourceLikeLine(line);
+    sourceRun = sourceLike ? sourceRun + 1 : 0;
+    if (sourceLike || sourceRun >= 2) {
+      continue;
+    }
+    if (isProcessNoiseLine(line) || isInstructionLike(line) || isHistoricalMetaLine(line)) {
+      continue;
+    }
+    const trimmed = line.trim();
+    if (/^<.*>$/.test(trimmed)) {
+      continue;
+    }
+    if (/^\{.*"(?:cmd|command|workdir|agent_path|tool)".*\}$/.test(trimmed)) {
+      continue;
+    }
+    if (/^\[.*\]$/.test(trimmed)) {
+      continue;
+    }
+    visible.push(line);
+  }
+
+  return visible;
+}
+
+export function cleanVisibleChatText(value) {
+  return cleanVisibleLines(value).join("\n").trim();
 }
 
 export function sanitizeAssistantText(value) {

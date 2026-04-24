@@ -9,6 +9,7 @@ import { request, requestHistoryMessages, requestSessionById } from "./lib/api.j
 import { normalizeServerPayload } from "./lib/normalize-events.js";
 import {
   PREVIEW_FALLBACK,
+  cleanVisibleChatText,
   compactLine,
   createMessage,
   fallbackPreviewForSession,
@@ -29,9 +30,13 @@ const historyApiAvailable = ref(null);
 const sessionCache = reactive({});
 const pendingHydrations = new Map();
 const TOKEN_STORAGE_KEY = "heaticy-codex.saved-token";
+const CLIENT_HEARTBEAT_MS = 25_000;
+const SOCKET_RECONNECT_DELAY_MS = 700;
 let autoLoginTried = false;
 let replaySuppressionLines = new Set();
 let submitFallbackTimer = null;
+let socketHeartbeatTimer = null;
+let socketReconnectTimer = null;
 
 const LIVE_BOOTSTRAP_LINE_PATTERNS = [
   /^[╭╰│─]+$/,
@@ -192,6 +197,86 @@ function clearSubmitFallbackTimer() {
     window.clearTimeout(submitFallbackTimer);
     submitFallbackTimer = null;
   }
+}
+
+function clearSocketHeartbeat() {
+  if (socketHeartbeatTimer) {
+    window.clearInterval(socketHeartbeatTimer);
+    socketHeartbeatTimer = null;
+  }
+}
+
+function sendSocketPayload(socket, payload) {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    return false;
+  }
+
+  try {
+    socket.send(JSON.stringify(payload));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function sendClientHeartbeat(socket) {
+  return sendSocketPayload(socket, { type: "ping", ts: Date.now() });
+}
+
+function startSocketHeartbeat(socket) {
+  clearSocketHeartbeat();
+  sendClientHeartbeat(socket);
+  socketHeartbeatTimer = window.setInterval(() => {
+    if (state.activeSocket !== socket || socket.readyState !== WebSocket.OPEN) {
+      clearSocketHeartbeat();
+      return;
+    }
+    sendClientHeartbeat(socket);
+  }, CLIENT_HEARTBEAT_MS);
+}
+
+function scheduleActiveSocketReconnect() {
+  if (!state.isAuthenticated || !state.activeSessionMeta || route.name !== "chat") {
+    return;
+  }
+  if (state.activeSocket && state.activeSocket.readyState === WebSocket.OPEN) {
+    return;
+  }
+  if (socketReconnectTimer) {
+    return;
+  }
+
+  socketReconnectTimer = window.setTimeout(async () => {
+    socketReconnectTimer = null;
+    if (!state.isAuthenticated || !state.activeSessionMeta || route.name !== "chat") {
+      return;
+    }
+    if (state.activeSocket && state.activeSocket.readyState === WebSocket.OPEN) {
+      return;
+    }
+
+    try {
+      await ensureLiveSession();
+      if (state.statusText === "会话连接已关闭，请重试一次。" || state.statusText === "会话连接失败，请重试一次。") {
+        setStatus("");
+      }
+    } catch (error) {
+      if (state.statusText === "等待 Codex 回复…" || state.statusText === "正在发送…") {
+        setStatus(error?.message || String(error));
+      }
+    }
+  }, SOCKET_RECONNECT_DELAY_MS);
+}
+
+function handlePageBecameActive() {
+  if (document.visibilityState === "hidden") {
+    return;
+  }
+  if (state.activeSocket && state.activeSocket.readyState === WebSocket.OPEN) {
+    sendClientHeartbeat(state.activeSocket);
+    return;
+  }
+  scheduleActiveSocketReconnect();
 }
 
 function toFriendlyLoginError(error) {
@@ -441,10 +526,14 @@ function appendNormalizedParts(parts = []) {
 
   for (const part of parts) {
     const partType = String(part?.partType || "").trim();
-    const role = part?.role === "user" ? "user" : part?.role === "assistant" ? "assistant" : "system";
+    const role = part?.role === "user" ? "user" : part?.role === "assistant" ? "assistant" : "";
     const ts = part?.ts || new Date().toISOString();
     const phase = String(part?.phase || "final");
     const payload = part?.payload || {};
+
+    if (!role && partType !== "error") {
+      continue;
+    }
 
     if (partType === "markdown" || partType === "text") {
       const text = sanitizeAssistantText(normalizeLine(String(payload.text || "")));
@@ -482,6 +571,9 @@ function appendNormalizedParts(parts = []) {
     }
 
     if (partType === "image") {
+      if (role !== "assistant") {
+        continue;
+      }
       const url = String(payload.url || "").trim();
       if (!url) {
         continue;
@@ -507,14 +599,7 @@ function appendNormalizedParts(parts = []) {
       if (!errorText) {
         continue;
       }
-      messages.push(
-        createMessage("system", errorText, ts, {
-          source: part?.source || "normalized",
-          partType,
-          payload,
-          rawType: part?.rawType || ""
-        })
-      );
+      setStatus(errorText);
       touched = true;
     }
   }
@@ -668,6 +753,11 @@ async function handleLogin({ silent = false, auto = false } = {}) {
 
 function closeSocket() {
   clearSubmitFallbackTimer();
+  clearSocketHeartbeat();
+  if (socketReconnectTimer) {
+    window.clearTimeout(socketReconnectTimer);
+    socketReconnectTimer = null;
+  }
   if (state.activeSocket) {
     state.activeSocket.close();
     state.activeSocket = null;
@@ -734,9 +824,7 @@ function attachLiveSocket(sessionId, historyMessages = []) {
         return;
       }
       const snapshotBuffer = String(payload?.buffer || "");
-      const normalizedSnapshot = sanitizeAssistantText(
-        normalizeLine(snapshotBuffer.length > 12000 ? snapshotBuffer.slice(-12000) : snapshotBuffer)
-      );
+      const normalizedSnapshot = sanitizeAssistantText(cleanVisibleChatText(snapshotBuffer.length > 12000 ? snapshotBuffer.slice(-12000) : snapshotBuffer));
       if (normalizedSnapshot) {
         const lastAssistant = [...state.activeMessages]
           .reverse()
@@ -750,6 +838,15 @@ function attachLiveSocket(sessionId, historyMessages = []) {
           ]);
         }
       }
+      return;
+    }
+
+    if (payload.type === "ping") {
+      sendSocketPayload(socket, { type: "pong", ts: payload.ts || Date.now() });
+      return;
+    }
+
+    if (payload.type === "pong") {
       return;
     }
 
@@ -825,9 +922,12 @@ function attachLiveSocket(sessionId, historyMessages = []) {
   });
 
   socket.addEventListener("close", () => {
-    if (state.activeSocket === socket) {
-      state.activeSocket = null;
+    if (state.activeSocket !== socket) {
+      return;
     }
+
+    clearSocketHeartbeat();
+    state.activeSocket = null;
     finalizeAssistantStream();
     if (state.statusText === "已发送中断指令。") {
       setStatus("当前流程已中断。");
@@ -835,16 +935,26 @@ function attachLiveSocket(sessionId, historyMessages = []) {
     }
     if (state.statusText === "等待 Codex 回复…" || state.statusText === "正在发送…") {
       setStatus("会话连接已关闭，请重试一次。");
+      scheduleActiveSocketReconnect();
     }
   });
 
   socket.addEventListener("error", () => {
+    if (state.activeSocket !== socket) {
+      return;
+    }
+
     if (state.statusText === "等待 Codex 回复…" || state.statusText === "正在发送…") {
       setStatus("会话连接失败，请重试一次。");
+      scheduleActiveSocketReconnect();
     }
   });
 
-  return waitForSocketOpen(socket);
+  return waitForSocketOpen(socket).then(() => {
+    if (state.activeSocket === socket) {
+      startSocketHeartbeat(socket);
+    }
+  });
 }
 
 async function openLiveSession(session, { skipRoute = false } = {}) {
@@ -1312,6 +1422,9 @@ watch(
 );
 
 onMounted(async () => {
+  window.addEventListener("focus", handlePageBecameActive);
+  window.addEventListener("online", handlePageBecameActive);
+  document.addEventListener("visibilitychange", handlePageBecameActive);
   try {
     const savedToken = getSavedToken();
     if (savedToken) {
@@ -1334,6 +1447,9 @@ onMounted(async () => {
 });
 
 onBeforeUnmount(() => {
+  window.removeEventListener("focus", handlePageBecameActive);
+  window.removeEventListener("online", handlePageBecameActive);
+  document.removeEventListener("visibilitychange", handlePageBecameActive);
   closeSocket();
 });
 

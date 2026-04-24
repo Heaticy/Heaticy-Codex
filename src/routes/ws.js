@@ -1,13 +1,35 @@
 import { WebSocketServer } from "ws";
 
+function nowMs() {
+  return Date.now();
+}
+
+function safeSend(ws, payload) {
+  if (ws.readyState !== 1) {
+    return false;
+  }
+
+  try {
+    ws.send(JSON.stringify(payload));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function installWebSocketServer(server, runtime) {
   const wss = new WebSocketServer({ noServer: true });
   runtime.wss = wss;
+  const heartbeatMs = Math.max(5_000, Number(runtime.config.wsHeartbeatMs || 30_000));
+  const staleMs = Math.max(heartbeatMs * 3, 45_000);
 
   wss.on("connection", (ws, req, sessionId) => {
     ws.isAlive = true;
+    ws.lastSeenAt = nowMs();
+    ws.lastPingSentAt = 0;
     ws.on("pong", () => {
       ws.isAlive = true;
+      ws.lastSeenAt = nowMs();
     });
 
     try {
@@ -21,6 +43,15 @@ export function installWebSocketServer(server, runtime) {
     ws.on("message", (raw) => {
       try {
         const payload = JSON.parse(String(raw || "{}"));
+        ws.isAlive = true;
+        ws.lastSeenAt = nowMs();
+        if (payload.type === "pong") {
+          return;
+        }
+        if (payload.type === "ping") {
+          safeSend(ws, { type: "pong", ts: payload.ts || nowMs() });
+          return;
+        }
         if (payload.type === "input") {
           runtime.sessionManager.write(sessionId, payload.data || "");
         } else if (payload.type === "resize") {
@@ -33,15 +64,23 @@ export function installWebSocketServer(server, runtime) {
   });
 
   const heartbeatInterval = setInterval(() => {
+    const current = nowMs();
     for (const ws of wss.clients) {
-      if (ws.isAlive === false) {
+      const lastSeenAt = Number(ws.lastSeenAt || 0);
+      if (ws.isAlive === false && current - lastSeenAt > staleMs) {
         ws.terminate();
         continue;
       }
       ws.isAlive = false;
-      ws.ping();
+      ws.lastPingSentAt = current;
+      safeSend(ws, { type: "ping", ts: current });
+      try {
+        ws.ping();
+      } catch {
+        // Some browser/proxy combinations can reject protocol pings transiently.
+      }
     }
-  }, runtime.config.wsHeartbeatMs);
+  }, heartbeatMs);
 
   wss.on("close", () => {
     clearInterval(heartbeatInterval);

@@ -287,6 +287,69 @@ function emitNoReplyFallback(manager, session) {
   });
 }
 
+function extractNotificationTextParts(value) {
+  if (value == null) {
+    return [];
+  }
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    const text = String(value);
+    return text.trim() ? [text] : [];
+  }
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => extractNotificationTextParts(item));
+  }
+  if (typeof value !== "object") {
+    return [];
+  }
+
+  const parts = [];
+  const directKeys = [
+    "delta",
+    "text",
+    "message",
+    "value",
+    "output",
+    "stdout",
+    "stderr",
+    "reason",
+    "description",
+    "summary"
+  ];
+  for (const key of directKeys) {
+    parts.push(...extractNotificationTextParts(value[key]));
+  }
+
+  const nestedKeys = [
+    "item",
+    "content",
+    "parts",
+    "result",
+    "payload",
+    "metadata",
+    "annotations",
+    "changes"
+  ];
+  for (const key of nestedKeys) {
+    parts.push(...extractNotificationTextParts(value[key]));
+  }
+
+  return parts;
+}
+
+function extractNotificationText(value) {
+  const seen = new Set();
+  const parts = [];
+  for (const part of extractNotificationTextParts(value)) {
+    const text = String(part || "").trim();
+    if (!text || seen.has(text)) {
+      continue;
+    }
+    seen.add(text);
+    parts.push(text);
+  }
+  return parts.join("\n").trim();
+}
+
 function extractEmbeddedUserRequest(value) {
   const text = String(value || "");
   const userRequestMarker = "User request:";
@@ -1798,7 +1861,8 @@ export class SessionManager {
 
     for (const session of targets) {
       session.updatedAt = nowIso();
-      const itemType = String(params?.item?.type || "").trim();
+      const item = params?.item || {};
+      const itemType = String(item?.type || params?.itemType || "").trim();
       if (method === "item/agentMessage/delta" || normalizedMethod === "itemagentmessagedelta") {
         const delta = String(params?.delta || "");
         if (!delta.trim()) {
@@ -1816,29 +1880,25 @@ export class SessionManager {
         continue;
       }
       if (method === "item/completed" || normalizedMethod === "itemcompleted") {
-        const item = params?.item || {};
-        if (!isAgentMessageType(item?.type)) {
-          console.warn(
-            `[app-server] ignored completed item session=${session.id} thread=${threadId} itemType=${itemType || "unknown"}`
-          );
+        if (isAgentMessageType(item?.type)) {
+          const text = String(item?.text || extractNotificationText(item) || "").trim();
+          if (!text) {
+            console.warn(
+              `[app-server] empty completed agent message session=${session.id} thread=${threadId}`
+            );
+            continue;
+          }
+          session.turnHadVisibleOutput = true;
+          this.pushSessionBuffer(session, `${text}\n`);
+          this.broadcast(session, {
+            type: "message_part",
+            role: "assistant",
+            part: { type: "text", text, format: "markdown" },
+            phase: "final",
+            timestamp: nowIso()
+          });
           continue;
         }
-        const text = String(item?.text || "").trim();
-        if (!text) {
-          console.warn(
-            `[app-server] empty completed agent message session=${session.id} thread=${threadId}`
-          );
-          continue;
-        }
-        session.turnHadVisibleOutput = true;
-        this.pushSessionBuffer(session, `${text}\n`);
-        this.broadcast(session, {
-          type: "message_part",
-          role: "assistant",
-          part: { type: "text", text, format: "markdown" },
-          phase: "final",
-          timestamp: nowIso()
-        });
         continue;
       }
       if (method === "turn/completed" || normalizedMethod === "turncompleted") {
@@ -1850,8 +1910,18 @@ export class SessionManager {
         }
         continue;
       }
-      if (method === "thread/status/changed" || normalizedMethod === "threadstatuschanged") {
+      if (
+        method === "thread/status/changed" ||
+        normalizedMethod === "threadstatuschanged" ||
+        method === "turn/started" ||
+        normalizedMethod === "turnstarted" ||
+        method === "item/started" ||
+        normalizedMethod === "itemstarted"
+      ) {
         this.broadcast(session, { type: "session_updated", session: this.serialize(session) });
+        continue;
+      }
+      if (method === "thread/tokenUsage/updated" || normalizedMethod === "threadtokenusageupdated") {
         continue;
       }
       console.warn(

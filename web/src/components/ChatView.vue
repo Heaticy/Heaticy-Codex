@@ -88,9 +88,9 @@ function splitMessageParts(message) {
     .filter((line) => String(line || "").trim().length > 0);
 
   const processLines = lines.filter((line) => isProcessLine(line));
+  const visibleLines = lines.filter((line) => !isProcessLine(line));
   return {
-    // Keep full assistant text visible by default to avoid hiding real content.
-    primary: lines.join("\n").trim(),
+    primary: visibleLines.join("\n").trim(),
     process: processLines.join("\n").trim()
   };
 }

@@ -10,6 +10,28 @@ function safeObject(value) {
   return value && typeof value === "object" ? value : {};
 }
 
+function visibleChatRole(value) {
+  const role = asText(value).toLowerCase();
+  if (role === "user" || role === "assistant") {
+    return role;
+  }
+  return "";
+}
+
+function isInternalItemType(value) {
+  const type = asText(value).replace(/[._/-]/g, "").toLowerCase();
+  return (
+    !type ||
+    type.includes("commandexecution") ||
+    type.includes("filechange") ||
+    type.includes("tool") ||
+    type.includes("reasoning") ||
+    type.includes("tokenusage") ||
+    type.includes("approval") ||
+    type.includes("status")
+  );
+}
+
 export function createUiPart({
   sessionId = "",
   role = "assistant",
@@ -53,9 +75,13 @@ export function normalizeLegacyDataEvent(payload, sessionId = "") {
 
 export function normalizeMessagePartEvent(payload, sessionId = "") {
   const part = safeObject(payload?.part);
-  const role = asText(payload?.role) || "assistant";
+  const role = visibleChatRole(payload?.role || "assistant");
   const partType = asText(part.type);
   const ts = asText(payload?.timestamp) || new Date().toISOString();
+
+  if (!role) {
+    return [];
+  }
 
   if ((partType === "text" || partType === "markdown") && asText(part.text)) {
     return [
@@ -165,7 +191,14 @@ function normalizeEventMsgPayload(eventMsg, sessionId = "") {
 function normalizeResponseItemPayload(payload, sessionId = "") {
   const item = safeObject(payload?.item || payload);
   const ts = asText(item?.timestamp || payload?.timestamp) || new Date().toISOString();
-  const role = asText(item?.role || payload?.role) || "assistant";
+  const rawType = asText(item?.type || payload?.type || "response_item");
+  if (isInternalItemType(rawType)) {
+    return [];
+  }
+  const role = visibleChatRole(item?.role || payload?.role || (rawType === "user_message" ? "user" : "assistant"));
+  if (!role) {
+    return [];
+  }
 
   const collectText = (node) => {
     if (node == null) {
@@ -191,7 +224,6 @@ function normalizeResponseItemPayload(payload, sessionId = "") {
     return [directText, ...nested].filter(Boolean);
   };
 
-  const rawType = asText(item?.type || payload?.type || "response_item");
   const text = collectText(item).join("\n").trim();
   if (!text) {
     return [];
@@ -200,7 +232,7 @@ function normalizeResponseItemPayload(payload, sessionId = "") {
   return [
     createUiPart({
       sessionId,
-      role: role === "user" ? "user" : role === "system" ? "system" : "assistant",
+      role,
       partType: "markdown",
       payload: { text },
       ts,

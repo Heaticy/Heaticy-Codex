@@ -161,6 +161,20 @@ function isProcessNoiseLine(value) {
   return (
     /^working\(/.test(text) ||
     /esc to interrupt/.test(text) ||
+    /^thinking\b/.test(text) ||
+    /^tool\b/.test(text) ||
+    /^observation\b/.test(text) ||
+    /^bash\b/.test(text) ||
+    /^zsh\b/.test(text) ||
+    /^pwd\b/.test(text) ||
+    /^cd\b/.test(text) ||
+    /^apply_patch\b/.test(text) ||
+    /^exec_command\b/.test(text) ||
+    /commandexecution/.test(text) ||
+    /filechange/.test(text) ||
+    /requestapproval/.test(text) ||
+    /tokenusage/.test(text) ||
+    /subagent_notification/.test(text) ||
     /\b\d{1,3}% left\b/.test(text) ||
     /dangerously-bypass-approvals-and-sandbox/.test(text) ||
     /codex resume/.test(text) ||
@@ -177,8 +191,23 @@ function isProcessNoiseLine(value) {
   );
 }
 
+export function cleanVisibleChatText(value) {
+  const lines = normalizeLine(value)
+    .split("\n")
+    .map((line) => collapseDoubledAscii(line).trimEnd())
+    .filter(Boolean)
+    .filter((line) => !isProcessNoiseLine(line))
+    .filter((line) => !isInstructionLike(line))
+    .filter((line) => !isHistoricalMetaLine(line))
+    .filter((line) => !/^<.*>$/.test(line.trim()))
+    .filter((line) => !/^\{.*"(?:cmd|command|workdir|agent_path|tool)".*\}$/.test(line.trim()))
+    .filter((line) => !/^\[.*\]$/.test(line.trim()));
+
+  return lines.join("\n").trim();
+}
+
 export function sanitizeAssistantText(value) {
-  const raw = normalizeLine(value || "");
+  const raw = cleanVisibleChatText(value || "");
   if (!raw) {
     return "";
   }
@@ -329,7 +358,7 @@ export function extractHistoricalSummaryCandidate(messages, title, fallback = ""
 }
 
 function cleanHistoricalMessageText(value) {
-  const lines = normalizeLine(value)
+  const lines = cleanVisibleChatText(value)
     .split("\n")
     .map((line) => compactLine(line))
     .filter(Boolean)
@@ -404,7 +433,7 @@ export function normalizeHistoryMessages(messages) {
   const normalized = [];
   for (const item of messages || []) {
     const role = item?.role === "user" ? "user" : "assistant";
-    const text = normalizeLine(item?.text || "");
+    const text = cleanHistoricalMessageText(item?.text || "");
     if (!text) {
       continue;
     }

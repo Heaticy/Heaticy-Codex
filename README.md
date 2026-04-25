@@ -8,6 +8,24 @@ This repository is a fork of an open source Codex web terminal project, renamed 
 
 Currently supports **Codex** only.
 
+## Codex Runtime
+
+- App-server now uses Codex `app-server` over **stdio** by default, so a normal start no longer opens `127.0.0.1:8777`.
+- Temporary websocket compatibility is still available with `CODEX_APP_SERVER_TRANSPORT=ws`; that path keeps `CODEX_APP_SERVER_LISTEN_URL` and logs a deprecation warning.
+- When `CODEX_APP_SERVER_ENABLED=false`, the fallback `json_exec` path uses `@openai/codex-sdk`.
+
+## Approvals
+
+Codex command, file-change, and permission requests are surfaced in the web UI for per-action approval. `CODEX_FULL_ACCESS=true` keeps the old auto-allow behavior only for non-high-risk requests; high-risk requests always require manual approval.
+
+Persistent allow rules live in `~/.heaticy-codex/approvals.json`. Audit records are appended to `~/.heaticy-codex/audit.log`.
+
+## Operations
+
+- `GET /api/healthz` returns bridge readiness, active runner count, and last error time.
+- `GET /api/metrics` exposes Prometheus text metrics such as active sessions, Codex turn totals, and approval decisions.
+- PM2 config restarts daily at 04:00 and restarts the process if memory exceeds 1G.
+
 ## Screenshots
 
 <p align="center">

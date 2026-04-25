@@ -8,6 +8,24 @@
 
 当前仅支持 **Codex**。
 
+## Codex 运行方式
+
+- App-server 默认改为通过 **stdio** 运行 `codex app-server`，正常启动不再监听 `127.0.0.1:8777`。
+- 旧 websocket transport 可临时用 `CODEX_APP_SERVER_TRANSPORT=ws` 保留；该模式继续读取 `CODEX_APP_SERVER_LISTEN_URL`，启动时会打印废弃警告。
+- 当 `CODEX_APP_SERVER_ENABLED=false` 时，`json_exec` fallback 改走 `@openai/codex-sdk`。
+
+## 审批流
+
+Codex 的命令执行、文件修改、权限提升请求会推到前端逐条确认。`CODEX_FULL_ACCESS=true` 只会继续自动允许非高危请求；高危请求始终需要人工确认。
+
+持久化白名单位于 `~/.heaticy-codex/approvals.json`，审计日志追加写入 `~/.heaticy-codex/audit.log`。
+
+## 运维接口
+
+- `GET /api/healthz` 返回 bridge ready、runner 数量、最近错误时间。
+- `GET /api/metrics` 暴露 Prometheus 文本指标，包括活跃会话、Codex turn 计数和审批决策计数。
+- PM2 配置已加入每天 04:00 重启与 1G 内存上限重启。
+
 ## 示例截图
 
 <p align="center">

@@ -48,7 +48,7 @@ function openRaw() {
   <section class="session-status-bar">
     <div class="status-main">
       <span class="turn-badge" :data-state="turnState">{{ turnState }}</span>
-      <span class="status-pill">model {{ meta.model || "default" }}</span>
+      <span class="status-pill model-pill">model {{ meta.model || "Codex default" }}</span>
       <span v-if="meta.profile" class="status-pill">profile {{ meta.profile }}</span>
       <span class="status-pill">transport {{ meta.transport || "unknown" }}</span>
       <button class="cwd-chip" type="button" :title="cwd" @click="cwdExpanded = !cwdExpanded">{{ cwdLabel }}</button>
@@ -78,9 +78,8 @@ function openRaw() {
   position: sticky;
   top: 50px;
   z-index: 9;
-  border-bottom: 1px solid rgba(88, 166, 255, 0.14);
-  background: rgba(7, 14, 27, 0.92);
-  backdrop-filter: blur(14px);
+  border-bottom: 1px solid rgba(125, 185, 255, 0.2);
+  background: #07111f;
 }
 
 .status-main {
@@ -98,10 +97,10 @@ function openRaw() {
 .icon-action {
   flex: 0 0 auto;
   min-height: 26px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
+  border: 1px solid rgba(148, 163, 184, 0.34);
   border-radius: 7px;
-  background: rgba(15, 23, 42, 0.72);
-  color: #cbd5e1;
+  background: #111c2f;
+  color: #e5eefb;
   font-size: 12px;
   line-height: 1;
   padding: 6px 8px;
@@ -127,7 +126,7 @@ function openRaw() {
 
 .status-time {
   flex: 0 0 auto;
-  color: #8aa7c6;
+  color: #b6c7dc;
   font-size: 12px;
 }
 

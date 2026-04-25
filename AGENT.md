@@ -52,6 +52,7 @@ This file is the handoff entry for a new agent working in this repository.
 - For backend syntax after session manager edits: `node --check ./src/sessionManager.js`.
 - For frontend/event-display edits: `npm run web:build`.
 - For broader validation: `npm run check`.
+- For any web UI, WebSocket, session lifecycle, routing, or end-to-end behavior change, you must actually open the running web app in a browser and verify the affected workflow before handoff. Use automated browser control or a real browser, test the relevant desktop/tablet/mobile viewport when applicable, and report what URL, viewport, workflow, and result were verified. Do not hand off based only on build success or “looks implemented” reasoning.
 - Before handoff: `git diff --check`.
 
 ## Common Commands

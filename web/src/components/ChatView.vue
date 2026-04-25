@@ -63,6 +63,7 @@ const activeActivity = computed(() => {
   }
   return "";
 });
+const turnIsActive = computed(() => !["", "idle", "resumed"].includes(String(props.sessionMeta?.turnState || "idle")));
 
 const PROCESS_PATTERNS = [
   /^›/,
@@ -231,6 +232,7 @@ const renderedMessages = computed(() =>
       renderKind,
       eventLabel: EVENT_LABELS[partType] || "Event",
       eventPhase: message.phase || payload.phase || "",
+      eventPreview: parts.process ? parts.process.split("\n")[0].slice(0, 120) : "",
       imageUrl,
       imageAlt,
       displayText: parts.primary || "",
@@ -465,7 +467,11 @@ onBeforeUnmount(() => {
 
           <details v-else-if="message.renderKind === 'event'" class="event-card" :open="message.partType === 'reasoning' && !isTouchDevice">
             <summary>
-              <span>{{ message.eventLabel }} <small v-if="message.eventPhase && message.eventPhase !== 'final'">运行中…</small></span>
+              <span>
+                {{ message.eventLabel }}
+                <em v-if="message.eventPreview">{{ message.eventPreview }}</em>
+                <small v-if="turnIsActive && message.eventPhase && message.eventPhase !== 'final'">运行中…</small>
+              </span>
               <button type="button" @click.prevent="copyText(message.processText)">复制</button>
             </summary>
             <pre class="event-card-text">{{ message.processText }}</pre>
@@ -674,21 +680,20 @@ onBeforeUnmount(() => {
   max-width: 100%;
   min-width: 0;
   overflow: hidden;
-  border-radius: 20px;
+  border-radius: 14px;
   padding: 11px 13px;
-  border: 1px solid rgba(88, 166, 255, 0.18);
-  background: rgba(10, 24, 48, 0.82);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255,255,255,0.04);
-  backdrop-filter: blur(12px);
+  border: 1px solid rgba(125, 185, 255, 0.26);
+  background: #0c1728;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255,255,255,0.05);
 }
 
 .message-item.user .message-bubble {
   width: max-content;
   min-width: 64px;
   max-width: 100%;
-  border-color: rgba(94, 234, 212, 0.28);
-  background: linear-gradient(135deg, #0ea5e9 0%, #22d3ee 58%, #5eead4 100%);
-  box-shadow: 0 14px 28px rgba(14, 165, 233, 0.22);
+  border-color: rgba(103, 232, 249, 0.42);
+  background: #38bdf8;
+  box-shadow: 0 14px 28px rgba(14, 165, 233, 0.24);
 }
 
 .image-bubble {
@@ -712,7 +717,7 @@ onBeforeUnmount(() => {
   line-break: auto;
   font-size: 15px;
   line-height: 1.45;
-  color: #dceeff;
+  color: #f3f8ff;
   max-width: 100%;
   min-width: 0;
 }
@@ -724,7 +729,7 @@ onBeforeUnmount(() => {
   word-break: normal;
   max-width: 100%;
   color: #03111f;
-  font-weight: 520;
+  font-weight: 650;
 }
 
 .message-item.user .markdown-body :deep(p) {
@@ -866,10 +871,10 @@ onBeforeUnmount(() => {
 
 .event-card {
   width: min(760px, 100%);
-  border: 1px solid rgba(148, 163, 184, 0.24);
+  border: 1px solid rgba(148, 163, 184, 0.34);
   border-radius: 8px;
-  background: rgba(248, 250, 252, 0.88);
-  color: #334155;
+  background: #f8fafc;
+  color: #1e293b;
   overflow: hidden;
 }
 
@@ -883,6 +888,32 @@ onBeforeUnmount(() => {
   cursor: pointer;
   font-size: 12px;
   font-weight: 700;
+}
+
+.event-card summary span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.event-card summary em {
+  min-width: 0;
+  max-width: min(520px, 58vw);
+  overflow: hidden;
+  color: #0f172a;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-card summary small {
+  flex: 0 0 auto;
+  color: #0f766e;
+  font-size: 11px;
 }
 
 .event-card summary::-webkit-details-marker {

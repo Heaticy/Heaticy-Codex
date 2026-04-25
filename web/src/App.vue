@@ -154,6 +154,51 @@ const groupedSessions = computed(() => {
     );
 });
 
+const selectedProjectId = computed(() => {
+  const fromRoute = String(route.params.projectId || "").trim();
+  if (fromRoute) {
+    return fromRoute;
+  }
+  return String(state.activeSessionMeta?.projectId || state.projects[0]?.id || "").trim();
+});
+
+const decoratedSessions = computed(() =>
+  state.sessions
+    .map(decorateSession)
+    .filter((session) => String(session?.sessionType || "").trim().toLowerCase() !== "subagent")
+);
+
+const recentSessions = computed(() =>
+  [...decoratedSessions.value]
+    .sort((left, right) => String(right.updatedAt || "").localeCompare(String(left.updatedAt || "")))
+    .slice(0, 8)
+);
+
+const workbenchGroups = computed(() => {
+  const selected = selectedProjectId.value;
+  if (!selected) {
+    return groupedSessions.value;
+  }
+  const filtered = decoratedSessions.value.filter((session) => session.projectId === selected);
+  if (!filtered.length) {
+    return groupedSessions.value;
+  }
+  const groups = new Map();
+  for (const session of filtered) {
+    if (!groups.has(session.groupName)) {
+      groups.set(session.groupName, []);
+    }
+    groups.get(session.groupName).push(session);
+  }
+  return [...groups.entries()].map(([name, sessions]) => ({
+    name,
+    cwd: sessions[0]?.cwd || "",
+    sessions
+  }));
+});
+
+const hasChatRoute = computed(() => route.name === "chat" || route.name === "project-chat");
+
 const activeSessionTitle = computed(() => {
   if (!state.activeSessionMeta) {
     return "会话";
@@ -1276,6 +1321,19 @@ async function createSessionFromCurrentWorkspace() {
   await createSessionInGroup({ cwd });
 }
 
+async function openProject(project) {
+  const projectId = String(project?.id || "").trim();
+  if (!projectId) {
+    return;
+  }
+  state.activeSessionId = "";
+  state.activeLiveSessionId = "";
+  state.activeSessionMeta = null;
+  composerDraft.value = "";
+  setMessages([]);
+  await router.push({ name: "project", params: { projectId } });
+}
+
 async function deleteSessionItem(session) {
   if (!session) {
     return;
@@ -1614,6 +1672,10 @@ watch(
       return;
     }
 
+    if (routeName === "project" || routeName === "sessions") {
+      return;
+    }
+
     if (routeName !== "chat" && routeName !== "project-chat") {
       return;
     }
@@ -1689,7 +1751,7 @@ onMounted(async () => {
       state.accessToken = savedToken;
       state.rememberToken = true;
     }
-    await bootstrapWorkspace({ includeSessions: route.name !== "chat" });
+    await bootstrapWorkspace({ includeSessions: true });
     state.isAuthenticated = true;
   } catch {
     state.isAuthenticated = false;
@@ -1737,60 +1799,127 @@ if (typeof window !== 'undefined') {
     />
 
     <template v-else>
-      <section v-if="route.name === 'sessions'" class="mobile-shell">
-        <header class="mobile-header list">
-          <div class="header-copy">
-            <h1>会话</h1>
+      <section class="workbench-shell">
+        <aside class="project-sidebar" aria-label="Projects">
+          <div class="workbench-brand">
+            <strong>Codex</strong>
+            <span>Sessions</span>
           </div>
-        </header>
+          <button class="command-trigger" type="button" @click="state.commandPaletteOpen = true">Ctrl K</button>
 
-        <SessionListView
-          :groups="groupedSessions"
-          :active-session-id="state.activeSessionId"
-          :pending-session-id="state.pendingSessionId"
-          :format-relative-time="formatRelativeTime"
-          @open="openSessionItem"
-          @create-group-session="createSessionInGroup"
-          @delete-session="deleteSessionItem"
-          @open-codex-threads="openCodexThreadPicker"
-        />
+          <div class="sidebar-section">
+            <p class="sidebar-label">Projects</p>
+            <button
+              v-for="project in state.projects"
+              :key="project.id"
+              class="project-row"
+              :class="{ active: project.id === selectedProjectId }"
+              type="button"
+              @click="openProject(project)"
+            >
+              <span class="project-swatch" :style="{ background: project.color }"></span>
+              <span>{{ project.label }}</span>
+            </button>
+          </div>
 
-        <div v-if="state.statusText" class="notice-strip">{{ state.statusText }}</div>
-      </section>
+          <div class="sidebar-section recent-section">
+            <p class="sidebar-label">Recent</p>
+            <button
+              v-for="session in recentSessions"
+              :key="session.id"
+              class="recent-row"
+              type="button"
+              @click="openSessionItem(session)"
+            >
+              <span class="mini-state" :data-state="session.turnState || 'idle'"></span>
+              <span>{{ session.displayTitle }}</span>
+            </button>
+          </div>
+        </aside>
 
-      <ChatView
-        v-else-if="(route.name === 'chat' || route.name === 'project-chat') && state.activeSessionMeta"
-        :session-key="state.activeSessionMeta?.resumeSessionId || state.activeSessionMeta?.id || ''"
-        :open-token="state.activeSessionOpenToken"
-        :title="activeSessionTitle"
-        :thread-id="activeThreadId"
-        :expected-thread-id="expectedThreadId"
-        :thread-mismatch="threadMismatch"
-        :workspace-name="activeWorkspaceName"
-        :assistant-name="activeAssistantName"
-        :messages="state.activeMessages"
-        v-model:draft="composerDraft"
-        :can-send="canSend"
-        :can-interrupt="canInterrupt"
-        :loading="state.loading"
-        :session-meta="activeMeta"
-        :stall-warning="activeStallWarning"
-        :raw-events="activeRawEvents"
-        :status-text="connectionNotice || state.statusText"
-        :approval-requests="state.approvalRequests"
-        @back="backToList"
-        @interrupt="interruptActiveSession"
-        @create-sibling-session="createSessionFromCurrentWorkspace"
-        @delete-session="deleteSessionItem(state.activeSessionMeta)"
-        @approval-decision="handleApprovalDecision"
-        @ping-runner="pingActiveRunner"
-        @show-raw-events="loadRawEvents()"
-        @restart-runner="restartActiveRunner"
-        @submit="submitInput"
-      />
+        <aside class="sessions-sidebar" aria-label="Sessions">
+          <header class="sessions-head">
+            <div>
+              <p>Sessions</p>
+              <strong>{{ workbenchGroups[0]?.name || "Workspace" }}</strong>
+            </div>
+            <button type="button" title="打开本机 Codex 会话" @click="openCodexThreadPicker">⌘</button>
+          </header>
+          <SessionListView
+            :groups="workbenchGroups"
+            :active-session-id="state.activeSessionId"
+            :pending-session-id="state.pendingSessionId"
+            :format-relative-time="formatRelativeTime"
+            @open="openSessionItem"
+            @create-group-session="createSessionInGroup"
+            @delete-session="deleteSessionItem"
+            @open-codex-threads="openCodexThreadPicker"
+          />
+        </aside>
 
-      <section v-else class="mobile-shell centered-shell">
-        <div class="splash-card">正在加载会话页面…</div>
+        <main class="workbench-main">
+          <section v-if="route.name === 'sessions' || route.name === 'project'" class="mobile-session-pane">
+            <header class="mobile-header list">
+              <div class="header-copy">
+                <h1>会话</h1>
+              </div>
+            </header>
+
+            <SessionListView
+              :groups="workbenchGroups"
+              :active-session-id="state.activeSessionId"
+              :pending-session-id="state.pendingSessionId"
+              :format-relative-time="formatRelativeTime"
+              @open="openSessionItem"
+              @create-group-session="createSessionInGroup"
+              @delete-session="deleteSessionItem"
+              @open-codex-threads="openCodexThreadPicker"
+            />
+          </section>
+
+          <section v-if="route.name === 'sessions' || route.name === 'project'" class="workbench-empty desktop-empty">
+            <strong>选择一个会话开始</strong>
+            <span>左侧会话会保持后台运行，切换不会断开 runner。</span>
+          </section>
+
+          <ChatView
+            v-else-if="hasChatRoute && state.activeSessionMeta"
+            :session-key="state.activeSessionMeta?.resumeSessionId || state.activeSessionMeta?.id || ''"
+            :open-token="state.activeSessionOpenToken"
+            :title="activeSessionTitle"
+            :thread-id="activeThreadId"
+            :expected-thread-id="expectedThreadId"
+            :thread-mismatch="threadMismatch"
+            :workspace-name="activeWorkspaceName"
+            :assistant-name="activeAssistantName"
+            :messages="state.activeMessages"
+            v-model:draft="composerDraft"
+            :can-send="canSend"
+            :can-interrupt="canInterrupt"
+            :loading="state.loading"
+            :session-meta="activeMeta"
+            :stall-warning="activeStallWarning"
+            :raw-events="activeRawEvents"
+            :status-text="connectionNotice || state.statusText"
+            :approval-requests="state.approvalRequests"
+            @back="backToList"
+            @interrupt="interruptActiveSession"
+            @create-sibling-session="createSessionFromCurrentWorkspace"
+            @delete-session="deleteSessionItem(state.activeSessionMeta)"
+            @approval-decision="handleApprovalDecision"
+            @ping-runner="pingActiveRunner"
+            @show-raw-events="loadRawEvents()"
+            @restart-runner="restartActiveRunner"
+            @submit="submitInput"
+          />
+
+          <section v-else class="workbench-empty">
+            <strong>选择一个会话开始</strong>
+            <span>左侧会话会保持后台运行，切换不会断开 runner。</span>
+          </section>
+
+          <div v-if="state.statusText && !hasChatRoute" class="notice-strip">{{ state.statusText }}</div>
+        </main>
       </section>
 
       <aside v-if="state.codexThreadPickerOpen" class="thread-picker">

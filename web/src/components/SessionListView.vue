@@ -213,7 +213,7 @@ onBeforeUnmount(() => {
       </button>
     </div>
 
-    <div v-else class="empty-state">还没有可展示的会话。</div>
+    <div v-if="!groups.length" class="empty-state">还没有可展示的会话。</div>
   </main>
 </template>
 
@@ -246,13 +246,10 @@ onBeforeUnmount(() => {
 .session-group {
   position: relative;
   overflow: visible;
-  border: 1px solid rgba(88, 166, 255, 0.18);
-  border-radius: 22px;
-  background:
-    linear-gradient(180deg, rgba(12, 30, 60, 0.86), rgba(6, 16, 35, 0.78)),
-    radial-gradient(circle at top left, rgba(56, 189, 248, 0.16), transparent 42%);
-  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(18px);
+  border: 1px solid rgba(125, 185, 255, 0.24);
+  border-radius: 12px;
+  background: #0a1628;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .group-action-popover {
@@ -375,7 +372,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  color: #eaf4ff;
+  color: #f3f8ff;
   font-size: 15px;
   font-weight: 650;
   line-height: 1.25;
@@ -397,7 +394,7 @@ onBeforeUnmount(() => {
 
 .session-group-subtitle {
   margin: 5px 0 0;
-  color: #8aa7c6;
+  color: #b6c7dc;
   font-size: 12px;
   line-height: 1.35;
 }
@@ -445,9 +442,9 @@ onBeforeUnmount(() => {
   gap: 12px;
   width: 100%;
   padding: 10px 12px 10px 12px;
-  border: 1px solid rgba(88, 166, 255, 0.1);
-  border-radius: 16px;
-  background: rgba(8, 20, 42, 0.58);
+  border: 1px solid rgba(125, 185, 255, 0.18);
+  border-radius: 10px;
+  background: #0b1728;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.06),
     0 0 0 rgba(56, 189, 248, 0);
@@ -464,7 +461,7 @@ onBeforeUnmount(() => {
 }
 
 .session-row:hover {
-  background: rgba(15, 35, 70, 0.76);
+  background: #10243a;
 }
 
 .session-row:active {
@@ -477,8 +474,8 @@ onBeforeUnmount(() => {
 }
 
 .session-row.active {
-  border-color: rgba(94, 234, 212, 0.36);
-  background: linear-gradient(135deg, rgba(14, 165, 233, 0.2), rgba(8, 20, 42, 0.88));
+  border-color: rgba(94, 234, 212, 0.42);
+  background: #10243a;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.08),
     0 10px 24px rgba(14, 165, 233, 0.12);
@@ -501,9 +498,9 @@ onBeforeUnmount(() => {
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  color: #dceeff;
+  color: #f3f8ff;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1.3;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -511,7 +508,7 @@ onBeforeUnmount(() => {
 
 .session-row-time {
   flex: 0 0 auto;
-  color: #82a2c7;
+  color: #b6c7dc;
   font-size: 11px;
   line-height: 1.2;
   white-space: nowrap;

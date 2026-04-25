@@ -1,6 +1,7 @@
 import "dotenv/config";
 
 import crypto from "node:crypto";
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
@@ -32,6 +33,17 @@ function listEnv(name) {
     .filter(Boolean);
 }
 
+function readCodexConfigModel(codexHome) {
+  try {
+    const configPath = path.join(codexHome, "config.toml");
+    const content = fs.readFileSync(configPath, "utf8");
+    const match = content.match(/^\s*model\s*=\s*["']([^"']+)["']/m);
+    return String(match?.[1] || "").trim();
+  } catch {
+    return "";
+  }
+}
+
 function inferShellBin() {
   if (process.platform === "darwin") {
     return env("SHELL", "/bin/zsh");
@@ -50,6 +62,7 @@ function inferShellQuoteStyle() {
 
 const root = process.cwd();
 const home = process.env.HOME || os.homedir();
+const codexHome = env("CODEX_HOME", path.join(home, ".codex"));
 const generatedToken = crypto.randomBytes(18).toString("base64url");
 const shellBin = env("SHELL_BIN", inferShellBin());
 const shellArgs = env("SHELL_ARGS") ? listEnv("SHELL_ARGS") : inferShellArgs();
@@ -66,7 +79,7 @@ export const config = {
   shellArgs,
   shellQuoteStyle: env("SHELL_QUOTE_STYLE", inferShellQuoteStyle()),
   codexBin: env("CODEX_BIN", "codex"),
-  codexModel: env("CODEX_MODEL", ""),
+  codexModel: env("CODEX_MODEL", readCodexConfigModel(codexHome)),
   codexModels: listEnv("CODEX_MODELS"),
   codexProfile: env("CODEX_PROFILE", ""),
   codexFullAccess: boolEnv("CODEX_FULL_ACCESS", true),
@@ -98,8 +111,8 @@ export const config = {
   maxQueuedInputs: intEnv("MAX_QUEUED_INPUTS", 200),
   dataDir: path.join(root, "data"),
   heaticyDataDir: env("HEATICY_CODEX_HOME", path.join(home, ".heaticy-codex")),
-  codexHome: env("CODEX_HOME", path.join(home, ".codex")),
-  codexSessionsDir: env("CODEX_SESSIONS_DIR", path.join(env("CODEX_HOME", path.join(home, ".codex")), "sessions")),
+  codexHome,
+  codexSessionsDir: env("CODEX_SESSIONS_DIR", path.join(codexHome, "sessions")),
   ccSessionsDir: env("CC_SESSIONS_DIR", path.join(home, ".claude", "projects")),
   timezone: env("DISPLAY_TIMEZONE", "Australia/Melbourne")
 };

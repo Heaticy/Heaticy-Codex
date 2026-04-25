@@ -286,25 +286,26 @@ function isAgentMessageType(value) {
 
 function eventKindForItem(item, phase = "") {
   const type = String(item?.type || "").trim();
+  const normalizedType = normalizeSymbolToken(type);
   if (isAgentMessageType(type)) {
     return "agent_message";
   }
-  if (type === "reasoning") {
+  if (normalizedType === "reasoning") {
     return "reasoning";
   }
-  if (type === "command_execution") {
+  if (normalizedType === "commandexecution") {
     return String(phase || "").includes("updated") || item?.aggregated_output ? "command_output" : "command_exec";
   }
-  if (type === "file_change") {
+  if (normalizedType === "filechange") {
     return "file_change";
   }
-  if (type === "mcp_tool_call") {
+  if (normalizedType === "mcptoolcall") {
     return "mcp_tool_call";
   }
-  if (type === "todo_list") {
+  if (normalizedType === "todolist") {
     return "plan_update";
   }
-  if (type === "error") {
+  if (normalizedType === "error") {
     return "error";
   }
   return "";
@@ -1723,7 +1724,7 @@ export class SessionManager {
     return {
       id: session.id,
       projectId: session.projectId || "",
-      model: meta.model || "default",
+      model: meta.model || session.model || "Codex default",
       cwd: meta.cwd || session.cwd || "",
       profile: meta.profile || "",
       transport: meta.transport || "unknown",
@@ -2140,6 +2141,33 @@ export class SessionManager {
           type: "message_part",
           role: "assistant",
           part: { type: "text", text: delta, format: "markdown" },
+          phase: "streaming",
+          timestamp: nowIso()
+        });
+        continue;
+      }
+      if (
+        method === "item/commandExecution/outputDelta" ||
+        normalizedMethod === "itemcommandexecutionoutputdelta"
+      ) {
+        const delta = String(params?.delta || params?.output || "");
+        if (!delta.trim()) {
+          continue;
+        }
+        this.touchSessionEvent(session, {
+          turnState: "executing",
+          activity: `正在执行: ${String(item?.command || params?.command || "command").slice(0, 120)}`
+        });
+        this.broadcast(session, {
+          type: "message_part",
+          role: "assistant",
+          kind: "command_output",
+          part: {
+            type: "event",
+            kind: "command_output",
+            text: delta,
+            item: { ...item, aggregated_output: delta }
+          },
           phase: "streaming",
           timestamp: nowIso()
         });

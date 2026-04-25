@@ -206,8 +206,6 @@ function isProcessNoiseLine(value) {
     /current changes/.test(text) ||
     /\bworkdir\b/.test(text) ||
     /^~\//.test(text) ||
-    /^\/users\//.test(text) ||
-    /^\/home\//.test(text) ||
     /^@[a-z0-9._/-]+/.test(text) ||
     /^›/.test(text) ||
     /^>/.test(text) ||

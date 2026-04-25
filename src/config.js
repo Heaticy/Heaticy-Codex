@@ -33,11 +33,12 @@ function listEnv(name) {
     .filter(Boolean);
 }
 
-function readCodexConfigModel(codexHome) {
+function readCodexConfigString(codexHome, key) {
   try {
     const configPath = path.join(codexHome, "config.toml");
     const content = fs.readFileSync(configPath, "utf8");
-    const match = content.match(/^\s*model\s*=\s*["']([^"']+)["']/m);
+    const escapedKey = String(key || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const match = content.match(new RegExp(`^\\s*${escapedKey}\\s*=\\s*["']([^"']+)["']`, "m"));
     return String(match?.[1] || "").trim();
   } catch {
     return "";
@@ -79,7 +80,8 @@ export const config = {
   shellArgs,
   shellQuoteStyle: env("SHELL_QUOTE_STYLE", inferShellQuoteStyle()),
   codexBin: env("CODEX_BIN", "codex"),
-  codexModel: env("CODEX_MODEL", readCodexConfigModel(codexHome)),
+  codexModel: env("CODEX_MODEL", readCodexConfigString(codexHome, "model")),
+  codexReasoningEffort: env("CODEX_MODEL_REASONING_EFFORT", readCodexConfigString(codexHome, "model_reasoning_effort")),
   codexModels: listEnv("CODEX_MODELS"),
   codexProfile: env("CODEX_PROFILE", ""),
   codexFullAccess: boolEnv("CODEX_FULL_ACCESS", true),

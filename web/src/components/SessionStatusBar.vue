@@ -4,7 +4,7 @@ import { formatRelativeTime } from "../lib/session-helpers.js";
 
 /**
  * Props:
- * - meta: backend session_meta payload with model/cwd/profile/transport/turnState/lastEventAt.
+ * - meta: backend session_meta payload with model/reasoningEffort/cwd/profile/transport/turnState/lastEventAt.
  * - stallWarning: latest stall_warning payload, if any.
  * - rawEvents: recent raw backend events for the diagnostics drawer.
  */
@@ -30,6 +30,8 @@ const cwdLabel = computed(() => {
   return parts.at(-1) || cwd.value;
 });
 const turnState = computed(() => String(props.meta?.turnState || "idle"));
+const modelLabel = computed(() => String(props.meta?.model || "Codex default").trim());
+const reasoningEffort = computed(() => String(props.meta?.reasoningEffort || "").trim());
 const relativeLastEvent = computed(() => (props.meta?.lastEventAt ? formatRelativeTime(props.meta.lastEventAt) : "暂无事件"));
 
 function copyCwd() {
@@ -48,7 +50,11 @@ function openRaw() {
   <section class="session-status-bar">
     <div class="status-main">
       <span class="turn-badge" :data-state="turnState">{{ turnState }}</span>
-      <span class="status-pill model-pill">model {{ meta.model || "Codex default" }}</span>
+      <strong class="model-chip">
+        <span>MODEL</span>
+        {{ modelLabel }}
+        <em v-if="reasoningEffort">{{ reasoningEffort }}</em>
+      </strong>
       <span v-if="meta.profile" class="status-pill">profile {{ meta.profile }}</span>
       <span class="status-pill">transport {{ meta.transport || "unknown" }}</span>
       <button class="cwd-chip" type="button" :title="cwd" @click="cwdExpanded = !cwdExpanded">{{ cwdLabel }}</button>
@@ -78,8 +84,8 @@ function openRaw() {
   position: sticky;
   top: 50px;
   z-index: 9;
-  border-bottom: 1px solid rgba(125, 185, 255, 0.2);
-  background: #07111f;
+  border-bottom: 1px solid rgba(125, 185, 255, 0.16);
+  background: #070f1d;
 }
 
 .status-main {
@@ -104,6 +110,38 @@ function openRaw() {
   font-size: 12px;
   line-height: 1;
   padding: 6px 8px;
+}
+
+.model-chip {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  border: 1px solid rgba(94, 234, 212, 0.34);
+  border-radius: 7px;
+  background: linear-gradient(180deg, #102238, #0b182b);
+  color: #f8fafc;
+  font-size: 13px;
+  line-height: 1;
+  padding: 6px 9px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+.model-chip span {
+  color: #7dd3fc;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.model-chip em {
+  border-left: 1px solid rgba(148, 163, 184, 0.28);
+  color: #a7f3d0;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 800;
+  padding-left: 7px;
 }
 
 .turn-badge {

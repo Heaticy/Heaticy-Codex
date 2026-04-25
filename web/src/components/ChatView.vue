@@ -680,20 +680,26 @@ onBeforeUnmount(() => {
   max-width: 100%;
   min-width: 0;
   overflow: hidden;
-  border-radius: 14px;
-  padding: 11px 13px;
-  border: 1px solid rgba(125, 185, 255, 0.26);
-  background: #0c1728;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255,255,255,0.05);
+  border-radius: 9px;
+  padding: 12px 14px;
+  border: 1px solid rgba(126, 160, 205, 0.24);
+  background:
+    linear-gradient(180deg, #0e1b2e 0%, #0a1424 100%);
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .message-item.user .message-bubble {
   width: max-content;
   min-width: 64px;
   max-width: 100%;
-  border-color: rgba(103, 232, 249, 0.42);
-  background: #38bdf8;
-  box-shadow: 0 14px 28px rgba(14, 165, 233, 0.24);
+  border-color: rgba(125, 211, 252, 0.38);
+  background:
+    linear-gradient(180deg, #174461 0%, #11344d 100%);
+  box-shadow:
+    0 14px 30px rgba(2, 8, 23, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 .image-bubble {
@@ -728,7 +734,7 @@ onBeforeUnmount(() => {
   overflow-wrap: break-word;
   word-break: normal;
   max-width: 100%;
-  color: #03111f;
+  color: #f3f9ff;
   font-weight: 650;
 }
 

@@ -53,6 +53,7 @@ This file is the handoff entry for a new agent working in this repository.
 - For frontend/event-display edits: `npm run web:build`.
 - For broader validation: `npm run check`.
 - For any web UI, WebSocket, session lifecycle, routing, or end-to-end behavior change, you must actually open the running web app in a browser and verify the affected workflow before handoff. Use automated browser control or a real browser, test the relevant desktop/tablet/mobile viewport when applicable, and report what URL, viewport, workflow, and result were verified. Do not hand off based only on build success or “looks implemented” reasoning.
+- Maintain and use a self-feeding validation path for web work: the agent must be able to create/open a session, submit test input through the same HTTP/WebSocket/UI path a user would use, and then read the rendered browser result itself. For changes that affect chat, model metadata, routing, or session state, run that loop before acceptance instead of relying on static DOM inspection alone.
 - Before handoff: `git diff --check`.
 
 ## Common Commands

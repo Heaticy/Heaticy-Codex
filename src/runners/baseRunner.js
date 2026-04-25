@@ -27,11 +27,12 @@ export class BaseRunner extends EventEmitter {
    * Return session metadata exposed to the browser status bar.
    *
    * Example:
-   * runner.getMeta({ cwd: "/repo", model: "gpt-5-codex" });
+   * runner.getMeta({ cwd: "/repo", model: "gpt-5-codex", reasoningEffort: "high" });
    */
   getMeta(session = {}) {
     return {
       model: session.model || this.config.model || "",
+      reasoningEffort: session.reasoningEffort || this.config.codexReasoningEffort || "",
       cwd: session.cwd || "",
       profile: this.config.codexProfile || "",
       transport: session.transport || "unknown",

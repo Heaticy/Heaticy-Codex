@@ -98,6 +98,7 @@ export class JsonExecRunner extends BaseRunner {
     return {
       ...super.getMeta(session),
       model: session.model || this.config.codexModel || "",
+      reasoningEffort: session.reasoningEffort || this.config.codexReasoningEffort || "",
       profile: this.config.codexProfile || "",
       transport: "json_exec"
     };

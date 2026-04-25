@@ -29,6 +29,7 @@ export class AppServerRunner extends BaseRunner {
     return {
       ...super.getMeta(session),
       model: session.model || this.config.codexModel || "",
+      reasoningEffort: session.reasoningEffort || this.config.codexReasoningEffort || "",
       profile: this.config.codexProfile || "",
       transport: this.bridge?.transport || this.config.codexAppServerTransport || "stdio"
     };

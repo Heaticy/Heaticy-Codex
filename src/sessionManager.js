@@ -1199,19 +1199,33 @@ function selectModel(preferred, fallback) {
   return String(fallback || "").trim();
 }
 
+function selectReasoningEffort(preferred, fallback) {
+  const value = String(preferred || "").trim().toLowerCase();
+  const fallbackValue = String(fallback || "").trim().toLowerCase();
+  const allowed = new Set(["minimal", "low", "medium", "high", "xhigh"]);
+  if (allowed.has(value)) {
+    return value;
+  }
+  return allowed.has(fallbackValue) ? fallbackValue : "";
+}
+
 function buildProviders(config) {
   const codexBootstrapNames = uniqueStrings(["codex", commandBaseName(config.codexBin)]);
   const ccBootstrapNames = uniqueStrings(["cc", "claude", commandBaseName(config.ccBin)]);
   const codexModelOptions = uniqueTrimmedStrings([config.codexModel, ...(config.codexModels || [])]);
   const ccModelOptions = uniqueTrimmedStrings([config.ccModel, ...(config.ccModels || [])]);
-  const codexArgs = ({ resumeSessionId, model }) => {
+  const codexArgs = ({ resumeSessionId, model, reasoningEffort }) => {
     const args = [];
     const selectedModel = selectModel(model, config.codexModel);
+    const selectedReasoningEffort = selectReasoningEffort(reasoningEffort, config.codexReasoningEffort);
     if (resumeSessionId) {
       args.push("resume", "--all", resumeSessionId);
     }
     if (selectedModel) {
       args.push("--model", selectedModel);
+    }
+    if (selectedReasoningEffort) {
+      args.push("-c", `model_reasoning_effort="${selectedReasoningEffort}"`);
     }
     if (config.codexProfile) {
       args.push("--profile", config.codexProfile);
@@ -1258,15 +1272,17 @@ function buildProviders(config) {
       sessionsDir: config.codexSessionsDir,
       bootstrapNames: codexBootstrapNames,
       defaultModel: config.codexModel,
+      defaultReasoningEffort: config.codexReasoningEffort,
       models: codexModelOptions,
-      buildSpawnSpec({ resumeSessionId, model }) {
+      reasoningEfforts: ["low", "medium", "high", "xhigh"],
+      buildSpawnSpec({ resumeSessionId, model, reasoningEffort }) {
         return {
           file: config.codexBin,
-          args: codexArgs({ resumeSessionId, model })
+          args: codexArgs({ resumeSessionId, model, reasoningEffort })
         };
       },
-      buildCommand({ resumeSessionId, model }) {
-        const parts = [config.codexBin, ...codexArgs({ resumeSessionId, model })];
+      buildCommand({ resumeSessionId, model, reasoningEffort }) {
+        const parts = [config.codexBin, ...codexArgs({ resumeSessionId, model, reasoningEffort })];
         return buildShellCommand(parts, config.shellQuoteStyle);
       }
     },
@@ -1280,7 +1296,9 @@ function buildProviders(config) {
       sessionsDir: config.ccSessionsDir,
       bootstrapNames: ccBootstrapNames,
       defaultModel: config.ccModel,
+      defaultReasoningEffort: "",
       models: ccModelOptions,
+      reasoningEfforts: [],
       buildSpawnSpec({ resumeSessionId, name, model }) {
         return {
           file: config.ccBin,
@@ -1402,7 +1420,9 @@ export class SessionManager {
       cliLabel: provider.cliLabel,
       historyLabel: provider.historyLabel,
       defaultModel: provider.defaultModel || "",
-      models: provider.models || []
+      defaultReasoningEffort: provider.defaultReasoningEffort || "",
+      models: provider.models || [],
+      reasoningEfforts: provider.reasoningEfforts || []
     }));
   }
 
@@ -1498,17 +1518,20 @@ export class SessionManager {
     return candidates.length ? this.serialize(candidates[0]) : null;
   }
 
-  create({ cwd = "", name = "", resumeSessionId = "", provider = "codex", model = "" } = {}) {
+  create({ cwd = "", name = "", resumeSessionId = "", provider = "codex", model = "", reasoningEffort = "" } = {}) {
     const resolvedProvider = this.getProvider(provider);
     const id = crypto.randomUUID();
     const resolvedCwd = this.resolveCwd(cwd);
     const project = this.projectStore.ensureForCwd(resolvedCwd);
     const fallbackName = `${resolvedProvider.fallbackPrefix}-${this.sessions.size + 1}`;
     const sessionName = normalizeName(name, fallbackName);
+    const selectedModel = String(model || "").trim() || resolvedProvider.defaultModel || "";
+    const selectedReasoningEffort = selectReasoningEffort(reasoningEffort, resolvedProvider.defaultReasoningEffort);
     const spawnSpec = resolvedProvider.buildSpawnSpec({
       resumeSessionId: String(resumeSessionId || "").trim() || null,
       name: sessionName,
-      model: String(model || "").trim()
+      model: selectedModel,
+      reasoningEffort: selectedReasoningEffort
     });
 
     if (resolvedProvider.id === "codex") {
@@ -1548,7 +1571,8 @@ export class SessionManager {
         resumeSessionId: String(resumeSessionId || "").trim() || null,
         resumeBootstrapComplete: true,
         pendingResumeInput: "",
-        model: String(model || "").trim() || resolvedProvider.defaultModel || "",
+        model: selectedModel,
+        reasoningEffort: selectedReasoningEffort,
         titleSource: String(name || "").trim() ? "user_provided" : "auto_generated",
         runnerMode: preferAppServer ? "app_server" : "json_exec",
         turnRunning: false,
@@ -1607,7 +1631,8 @@ export class SessionManager {
       resumeSessionId: String(resumeSessionId || "").trim() || null,
       resumeBootstrapComplete: !String(resumeSessionId || "").trim(),
       pendingResumeInput: "",
-      model: String(model || "").trim() || resolvedProvider.defaultModel || "",
+      model: selectedModel,
+      reasoningEffort: selectedReasoningEffort,
       titleSource: String(name || "").trim() ? "user_provided" : "auto_generated",
       sessionType: "main",
       parentThreadId: "",
@@ -1725,6 +1750,7 @@ export class SessionManager {
       id: session.id,
       projectId: session.projectId || "",
       model: meta.model || session.model || "Codex default",
+      reasoningEffort: meta.reasoningEffort || session.reasoningEffort || "",
       cwd: meta.cwd || session.cwd || "",
       profile: meta.profile || "",
       transport: meta.transport || "unknown",
@@ -2603,6 +2629,7 @@ export class SessionManager {
       inputPreview: session.inputPreview,
       resumeSessionId: session.resumeSessionId,
       model: session.model || "",
+      reasoningEffort: session.reasoningEffort || "",
       titleSource: session.titleSource || "",
       sessionType: session.sessionType || "main",
       parentThreadId: session.parentThreadId || "",

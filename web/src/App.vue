@@ -87,6 +87,9 @@ const state = reactive({
   lastSeqBySession: {},
   stallWarnings: {},
   rawEventsBySession: {},
+  runtimeConfig: null,
+  selectedModel: "",
+  selectedReasoningEffort: "",
   commandPaletteOpen: false,
   codexThreadPickerOpen: false,
   approvalRequests: [],
@@ -209,6 +212,35 @@ const activeSessionTitle = computed(() => {
 
 const activeWorkspaceName = computed(() => workspaceName(state.activeSessionMeta?.cwd || ""));
 const activeAssistantName = computed(() => state.activeSessionMeta?.providerLabel || "Codex");
+const codexProviderConfig = computed(() =>
+  (state.runtimeConfig?.providers || []).find((provider) => String(provider?.id || "").trim() === "codex") || {}
+);
+const modelOptions = computed(() => {
+  const values = [
+    state.selectedModel,
+    activeMeta.value?.model,
+    codexProviderConfig.value.defaultModel,
+    ...(codexProviderConfig.value.models || [])
+  ];
+  return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
+});
+const reasoningEffortOptions = computed(() => {
+  const values = [
+    state.selectedReasoningEffort,
+    activeMeta.value?.reasoningEffort,
+    codexProviderConfig.value.defaultReasoningEffort,
+    ...(codexProviderConfig.value.reasoningEfforts || []),
+    "low",
+    "medium",
+    "high",
+    "xhigh"
+  ];
+  return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
+});
+const selectedModelLabel = computed(() => state.selectedModel || codexProviderConfig.value.defaultModel || activeMeta.value?.model || "Codex default");
+const selectedReasoningEffortLabel = computed(
+  () => state.selectedReasoningEffort || codexProviderConfig.value.defaultReasoningEffort || activeMeta.value?.reasoningEffort || "default"
+);
 const activeMeta = computed(() => {
   const id = String(state.activeLiveSessionId || state.activeSessionMeta?.id || "");
   return state.sessionMetas[id] || state.activeSessionMeta || {};
@@ -868,9 +900,26 @@ function resolveWsUrl(sessionId, sinceSeq = 0) {
 }
 
 async function bootstrapWorkspace({ includeSessions = true } = {}) {
+  await loadRuntimeConfig();
   if (includeSessions) {
     await refreshSessions();
   }
+}
+
+async function loadRuntimeConfig() {
+  if (state.runtimeConfig) {
+    return state.runtimeConfig;
+  }
+  const config = await request("/api/config");
+  state.runtimeConfig = config;
+  const provider = (config.providers || []).find((item) => String(item?.id || "") === "codex") || {};
+  if (!state.selectedModel) {
+    state.selectedModel = String(provider.defaultModel || provider.models?.[0] || "").trim();
+  }
+  if (!state.selectedReasoningEffort) {
+    state.selectedReasoningEffort = String(provider.defaultReasoningEffort || provider.reasoningEfforts?.[2] || "").trim();
+  }
+  return config;
 }
 
 async function handleLogin({ silent = false, auto = false } = {}) {
@@ -1292,7 +1341,9 @@ async function createSessionInGroup(group) {
       method: "POST",
       body: JSON.stringify({
         provider: "codex",
-        cwd
+        cwd,
+        model: state.selectedModel,
+        reasoningEffort: state.selectedReasoningEffort
       })
     });
     await refreshSessions();
@@ -1428,7 +1479,9 @@ async function ensureLiveSession() {
       provider: state.activeSessionMeta.provider,
       cwd: state.activeSessionMeta.cwd,
       name: state.activeSessionMeta.displayTitle || state.activeSessionMeta.name,
-      resumeSessionId: state.activeSessionMeta.resumeSessionId
+      resumeSessionId: state.activeSessionMeta.resumeSessionId,
+      model: state.selectedModel,
+      reasoningEffort: state.selectedReasoningEffort
     })
   });
 
@@ -1580,7 +1633,9 @@ async function resumeCodexThread(thread) {
         provider: "codex",
         cwd: thread.cwd || state.activeSessionMeta?.cwd || "",
         name: thread.label || "本机 Codex 会话",
-        resumeThreadId: threadId
+        resumeThreadId: threadId,
+        model: state.selectedModel,
+        reasoningEffort: state.selectedReasoningEffort
       })
     });
     state.codexThreadPickerOpen = false;
@@ -1806,6 +1861,22 @@ if (typeof window !== 'undefined') {
             <span>Sessions</span>
           </div>
           <button class="command-trigger" type="button" @click="state.commandPaletteOpen = true">Ctrl K</button>
+
+          <div class="model-switcher" aria-label="Codex model settings">
+            <label>
+              <span>Model</span>
+              <select v-model="state.selectedModel">
+                <option v-for="model in modelOptions" :key="model" :value="model">{{ model }}</option>
+              </select>
+            </label>
+            <label>
+              <span>Reasoning</span>
+              <select v-model="state.selectedReasoningEffort">
+                <option v-for="effort in reasoningEffortOptions" :key="effort" :value="effort">{{ effort }}</option>
+              </select>
+            </label>
+            <small>新会话使用 {{ selectedModelLabel }} · {{ selectedReasoningEffortLabel }}</small>
+          </div>
 
           <div class="sidebar-section">
             <p class="sidebar-label">Projects</p>

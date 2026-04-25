@@ -31,6 +31,7 @@ export class PtyRunner extends BaseRunner {
     return {
       ...super.getMeta(session),
       model: session.model || "",
+      reasoningEffort: session.reasoningEffort || "",
       profile: "",
       transport: "pty"
     };

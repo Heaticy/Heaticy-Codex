@@ -1,9 +1,10 @@
 import crypto from "node:crypto";
-import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
 import pty from "node-pty";
+
+import { JsonExecRunner } from "./runners/jsonExecRunner.js";
 
 const shortTimeFormatterCache = new Map();
 
@@ -1224,6 +1225,7 @@ export class SessionManager {
   constructor(config, { appServerBridge = null } = {}) {
     this.config = config;
     this.appServerBridge = appServerBridge;
+    this.jsonExecRunner = new JsonExecRunner(config);
     this.sessions = new Map();
     this.providers = new Map(buildProviders(config).map((provider) => [provider.id, provider]));
     this.customNamesPath = path.join(this.config.dataDir, "session-names.json");
@@ -1710,7 +1712,7 @@ export class SessionManager {
     return hadOutput;
   }
 
-  maybeStartJsonExecRun(session) {
+  async maybeStartJsonExecRun(session) {
     if (!session || session.runnerMode !== "json_exec") {
       return;
     }
@@ -1723,107 +1725,46 @@ export class SessionManager {
       return;
     }
 
-    const args = this.buildCodexJsonExecArgs(session, prompt);
-    const child = spawn(this.config.codexBin, args, {
-      cwd: session.cwd,
-      env: process.env,
-      stdio: ["ignore", "pipe", "pipe"]
-    });
-    session.runningProcess = child;
+    session.runningProcess = { type: "codex_sdk" };
     session.updatedAt = nowIso();
-
-    let stdoutBuffer = "";
-    let stderrBuffer = "";
     let emittedAssistant = false;
-    const parseLine = (line) => {
-      const trimmed = String(line || "").trim();
-      if (!trimmed) {
-        return;
-      }
-      try {
-        const event = JSON.parse(trimmed);
+
+    try {
+      const result = await this.jsonExecRunner.runTurn(session, prompt, (event) => {
         if (this.handleCodexJsonEvent(session, event)) {
           emittedAssistant = true;
         }
-      } catch {
-        // Ignore non-json diagnostic lines.
-      }
-    };
-
-    child.stdout.on("data", (chunk) => {
-      stdoutBuffer += String(chunk || "");
-      const lines = stdoutBuffer.split(/\r?\n/);
-      stdoutBuffer = lines.pop() || "";
-      for (const line of lines) {
-        parseLine(line);
-      }
-    });
-
-    child.stderr.on("data", (chunk) => {
-      stderrBuffer += String(chunk || "");
-      if (stderrBuffer.length > 10000) {
-        stderrBuffer = stderrBuffer.slice(-10000);
-      }
-    });
-
-    child.on("close", (code) => {
-      if (stdoutBuffer.trim()) {
-        parseLine(stdoutBuffer.trim());
-      }
+      });
+      emittedAssistant = emittedAssistant || Boolean(result?.emittedAssistant);
       session.runningProcess = null;
       session.updatedAt = nowIso();
-      if (code && code !== 0) {
-        const concise = String(stderrBuffer || "")
-          .replace(/<[^>]+>/g, " ")
-          .replace(/\s+/g, " ")
-          .trim()
-          .slice(0, 220);
+      if (!emittedAssistant) {
         this.broadcast(session, {
           type: "message_part",
           role: "system",
-          part: { type: "text", text: concise ? `Codex 执行失败（exit=${code}）：${concise}` : `Codex 执行失败（exit=${code}）` },
-          phase: "final",
-          timestamp: nowIso()
-        });
-      } else if (!emittedAssistant) {
-        const concise = String(stderrBuffer || "")
-          .replace(/<[^>]+>/g, " ")
-          .replace(/\s+/g, " ")
-          .trim()
-          .slice(0, 220);
-        this.broadcast(session, {
-          type: "message_part",
-          role: "system",
-          part: { type: "text", text: concise ? `本轮无可展示回复：${concise}` : "本轮未返回可展示文本。" },
+          part: { type: "text", text: "本轮未返回可展示文本。" },
           phase: "final",
           timestamp: nowIso()
         });
       }
+    } catch (error) {
+      session.runningProcess = null;
+      session.updatedAt = nowIso();
+      const concise = String(error?.message || error || "")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 220);
+      this.broadcast(session, {
+        type: "message_part",
+        role: "system",
+        part: { type: "text", text: concise ? `Codex 执行失败：${concise}` : "Codex 执行失败" },
+        phase: "final",
+        timestamp: nowIso()
+      });
+    } finally {
       this.maybeStartJsonExecRun(session);
-    });
-  }
-
-  buildCodexJsonExecArgs(session, prompt) {
-    const args = ["exec"];
-    if (session.resumeSessionId) {
-      args.push("resume", "--all", session.resumeSessionId);
     }
-    args.push("--json", "--skip-git-repo-check");
-    const model = String(session.model || "").trim();
-    if (model) {
-      args.push("--model", model);
-    }
-    if (this.config.codexProfile) {
-      args.push("--profile", this.config.codexProfile);
-    }
-    if (this.config.codexFullAccess) {
-      args.push("--dangerously-bypass-approvals-and-sandbox");
-    }
-    if (Array.isArray(this.config.codexExtraArgs) && this.config.codexExtraArgs.length > 0) {
-      args.push(...this.config.codexExtraArgs);
-    }
-    args.push(prompt);
-    return args;
   }
 
   handleCodexJsonEvent(session, event) {
@@ -2022,6 +1963,9 @@ export class SessionManager {
     try {
       if (session.runnerMode === "json_exec" || session.runnerMode === "app_server") {
         session.turnRunning = false;
+        if (session.runnerMode === "json_exec") {
+          this.jsonExecRunner.stop(session);
+        }
       } else {
         session.shell.kill();
       }
@@ -2058,6 +2002,9 @@ export class SessionManager {
       try {
         if (session.runnerMode === "json_exec" || session.runnerMode === "app_server") {
           session.turnRunning = false;
+          if (session.runnerMode === "json_exec") {
+            this.jsonExecRunner.stop(session);
+          }
         } else {
           session.shell.kill();
         }

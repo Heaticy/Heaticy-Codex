@@ -33,7 +33,10 @@ export function installWebSocketServer(server, runtime) {
     });
 
     try {
-      runtime.sessionManager.attachClient(sessionId, ws);
+      const url = new URL(req.url || "/", "http://localhost");
+      runtime.sessionManager.attachClient(sessionId, ws, {
+        sinceSeq: Number(url.searchParams.get("sinceSeq") || 0)
+      });
     } catch (err) {
       ws.send(JSON.stringify({ type: "error", error: err?.message || String(err) }));
       ws.close();

@@ -46,6 +46,7 @@ let replaySuppressionLines = new Set();
 let submitFallbackTimer = null;
 let socketHeartbeatTimer = null;
 let socketReconnectTimer = null;
+const liveSockets = new Map();
 
 const LIVE_BOOTSTRAP_LINE_PATTERNS = [
   /^[╭╰│─]+$/,
@@ -72,12 +73,22 @@ const state = reactive({
   rememberToken: true,
   statusText: "",
   sessions: [],
+  projects: [],
+  codexThreads: [],
   activeSessionId: "",
   activeLiveSessionId: "",
   activeSessionMeta: null,
   activeMessages: [],
   activeSocket: null,
   activeStreamBuffer: "",
+  streamBuffers: {},
+  sessionMessages: {},
+  sessionMetas: {},
+  lastSeqBySession: {},
+  stallWarnings: {},
+  rawEventsBySession: {},
+  commandPaletteOpen: false,
+  codexThreadPickerOpen: false,
   approvalRequests: [],
   pendingSessionId: "",
   activeSessionOpenToken: 0,
@@ -153,8 +164,20 @@ const activeSessionTitle = computed(() => {
 
 const activeWorkspaceName = computed(() => workspaceName(state.activeSessionMeta?.cwd || ""));
 const activeAssistantName = computed(() => state.activeSessionMeta?.providerLabel || "Codex");
+const activeMeta = computed(() => {
+  const id = String(state.activeLiveSessionId || state.activeSessionMeta?.id || "");
+  return state.sessionMetas[id] || state.activeSessionMeta || {};
+});
+const activeStallWarning = computed(() => {
+  const id = String(state.activeLiveSessionId || state.activeSessionMeta?.id || "");
+  return state.stallWarnings[id] || null;
+});
+const activeRawEvents = computed(() => {
+  const id = String(state.activeLiveSessionId || state.activeSessionMeta?.id || "");
+  return state.rawEventsBySession[id] || [];
+});
 const routeHistoryTarget = computed(() => {
-  if (route.name !== "chat") {
+  if (route.name !== "chat" && route.name !== "project-chat") {
     return null;
   }
   return parseHistoryRouteSessionId(route.params.sessionId);
@@ -177,7 +200,7 @@ const threadMismatch = computed(() => {
   return expectedThreadId.value !== activeThreadId.value;
 });
 const connectionNotice = computed(() => {
-  if (route.name !== "chat" || !state.activeSessionMeta) {
+  if ((route.name !== "chat" && route.name !== "project-chat") || !state.activeSessionMeta) {
     return "";
   }
   if (state.statusText === "正在连接会话…") {
@@ -261,7 +284,7 @@ function startSocketHeartbeat(socket) {
 }
 
 function scheduleActiveSocketReconnect() {
-  if (!state.isAuthenticated || !state.activeSessionMeta || route.name !== "chat") {
+  if (!state.isAuthenticated || !state.activeSessionMeta || (route.name !== "chat" && route.name !== "project-chat")) {
     return;
   }
   if (state.activeSocket && state.activeSocket.readyState === WebSocket.OPEN) {
@@ -273,7 +296,7 @@ function scheduleActiveSocketReconnect() {
 
   socketReconnectTimer = window.setTimeout(async () => {
     socketReconnectTimer = null;
-    if (!state.isAuthenticated || !state.activeSessionMeta || route.name !== "chat") {
+    if (!state.isAuthenticated || !state.activeSessionMeta || (route.name !== "chat" && route.name !== "project-chat")) {
       return;
     }
     if (state.activeSocket && state.activeSocket.readyState === WebSocket.OPEN) {
@@ -302,6 +325,15 @@ function handlePageBecameActive() {
     return;
   }
   scheduleActiveSocketReconnect();
+}
+
+function handleGlobalKeydown(event) {
+  const isCommandK = event.key?.toLowerCase() === "k" && (event.metaKey || event.ctrlKey);
+  if (!isCommandK) {
+    return;
+  }
+  event.preventDefault();
+  state.commandPaletteOpen = !state.commandPaletteOpen;
 }
 
 function toFriendlyLoginError(error) {
@@ -365,7 +397,11 @@ function saveTokenPreference(token) {
   }
 }
 
-function setMessages(messages) {
+function setMessages(messages, sessionId = state.activeSessionId) {
+  const key = String(sessionId || "");
+  if (key) {
+    state.sessionMessages[key] = messages.filter((message) => message?.text);
+  }
   state.activeMessages = messages.filter((message) => message?.text);
   rebuildReplaySuppressionLines(state.activeMessages);
 }
@@ -443,11 +479,44 @@ function pruneMessagePartNoise(value) {
   return filtered.join("\n").trim();
 }
 
-function finalizeAssistantStream() {
-  if (!state.activeStreamBuffer) {
+function getSessionMessages(sessionId) {
+  const key = String(sessionId || state.activeSessionId || "");
+  return key && state.sessionMessages[key] ? [...state.sessionMessages[key]] : [...state.activeMessages];
+}
+
+function storeSessionMessages(sessionId, messages) {
+  const key = String(sessionId || state.activeSessionId || "");
+  const clean = messages.filter((message) => message?.text);
+  if (key) {
+    state.sessionMessages[key] = clean;
+  }
+  if (!key || key === state.activeSessionId) {
+    state.activeMessages = clean;
+    rebuildReplaySuppressionLines(state.activeMessages);
+  }
+}
+
+function getStreamBuffer(sessionId) {
+  const key = String(sessionId || state.activeSessionId || "");
+  return key ? String(state.streamBuffers[key] || "") : state.activeStreamBuffer;
+}
+
+function setStreamBuffer(sessionId, value) {
+  const key = String(sessionId || state.activeSessionId || "");
+  if (key) {
+    state.streamBuffers[key] = String(value || "");
+  }
+  if (!key || key === state.activeSessionId) {
+    state.activeStreamBuffer = String(value || "");
+  }
+}
+
+function finalizeAssistantStream(sessionId = state.activeSessionId) {
+  const buffer = getStreamBuffer(sessionId);
+  if (!buffer) {
     return;
   }
-  const messages = [...state.activeMessages];
+  const messages = getSessionMessages(sessionId);
   const last = messages[messages.length - 1];
   if (last?.streaming) {
     last.streaming = false;
@@ -455,22 +524,22 @@ function finalizeAssistantStream() {
     if (!last.text) {
       messages.pop();
     }
-    state.activeMessages = messages;
+    storeSessionMessages(sessionId, messages);
   }
-  state.activeStreamBuffer = "";
+  setStreamBuffer(sessionId, "");
 }
 
-function discardPendingAssistantStream() {
-  state.activeStreamBuffer = "";
-  const messages = [...state.activeMessages];
+function discardPendingAssistantStream(sessionId = state.activeSessionId) {
+  setStreamBuffer(sessionId, "");
+  const messages = getSessionMessages(sessionId);
   const last = messages[messages.length - 1];
   if (last?.role === "assistant" && last.streaming) {
     messages.pop();
-    state.activeMessages = messages;
+    storeSessionMessages(sessionId, messages);
   }
 }
 
-function appendAssistantChunk(chunk, { source = "normalized" } = {}) {
+function appendAssistantChunk(chunk, { source = "normalized" } = {}, sessionId = state.activeSessionId) {
   clearSubmitFallbackTimer();
   const now = Date.now();
   if (state.replayGuardActive && now >= state.replayGuardUntil) {
@@ -498,7 +567,7 @@ function appendAssistantChunk(chunk, { source = "normalized" } = {}) {
 
   const systemFailure = detectSystemFailureText(normalized);
   if (systemFailure) {
-    discardPendingAssistantStream();
+    discardPendingAssistantStream(sessionId);
     setStatus(systemFailure);
     return;
   }
@@ -507,24 +576,25 @@ function appendAssistantChunk(chunk, { source = "normalized" } = {}) {
     setStatus("");
   }
 
-  state.activeStreamBuffer += normalized;
-  let mergedText = sanitizeAssistantText(normalizeLine(state.activeStreamBuffer));
-  const lastUserMessage = [...state.activeMessages].reverse().find((message) => message.role === "user")?.text || "";
+  const nextBuffer = getStreamBuffer(sessionId) + normalized;
+  setStreamBuffer(sessionId, nextBuffer);
+  let mergedText = sanitizeAssistantText(normalizeLine(nextBuffer));
+  const lastUserMessage = getSessionMessages(sessionId).reverse().find((message) => message.role === "user")?.text || "";
   if (lastUserMessage && mergedText.startsWith(lastUserMessage)) {
     const tail = mergedText.slice(lastUserMessage.length).trim();
     if (!tail || /^[>›)\]}\-_=:.~|/\\\dA-Za-z]{1,24}$/.test(tail)) {
       mergedText = "";
-      state.activeStreamBuffer = "";
+      setStreamBuffer(sessionId, "");
     }
   }
   if (!mergedText || isDisposableAssistantFragment(mergedText)) {
     if (isDisposableAssistantFragment(mergedText)) {
-      discardPendingAssistantStream();
+      discardPendingAssistantStream(sessionId);
     }
     return;
   }
 
-  const messages = [...state.activeMessages];
+  const messages = getSessionMessages(sessionId);
   const last = messages[messages.length - 1];
   if (last?.role === "assistant" && last.streaming) {
     last.text = mergedText;
@@ -532,20 +602,21 @@ function appendAssistantChunk(chunk, { source = "normalized" } = {}) {
     messages.push(
       createMessage("assistant", mergedText, new Date().toISOString(), {
         streaming: true,
-        source: "live"
+        source: "live",
+        phase: "streaming"
       })
     );
   }
-  state.activeMessages = messages;
+  storeSessionMessages(sessionId, messages);
 }
 
-function appendNormalizedParts(parts = []) {
+function appendNormalizedParts(parts = [], sessionId = state.activeSessionId) {
   clearSubmitFallbackTimer();
   if (!Array.isArray(parts) || parts.length === 0) {
     return;
   }
 
-  let messages = [...state.activeMessages];
+  let messages = getSessionMessages(sessionId);
   let touched = false;
   let hasStreamingUpdate = false;
 
@@ -566,7 +637,7 @@ function appendNormalizedParts(parts = []) {
         continue;
       }
       if (role === "assistant" && phase === "streaming") {
-        appendAssistantChunk(text, { source: part?.source || "normalized" });
+        appendAssistantChunk(text, { source: part?.source || "normalized" }, sessionId);
         touched = true;
         hasStreamingUpdate = true;
         continue;
@@ -588,6 +659,7 @@ function appendNormalizedParts(parts = []) {
           source: part?.source || "normalized",
           partType,
           payload,
+          phase,
           rawType: part?.rawType || ""
         })
       );
@@ -604,12 +676,13 @@ function appendNormalizedParts(parts = []) {
         continue;
       }
       const alt = String(payload.alt || "image").trim() || "image";
-      finalizeAssistantStream();
+      finalizeAssistantStream(sessionId);
       messages.push(
         createMessage(role, `![${alt}](${url})`, ts, {
           source: part?.source || "normalized",
           partType: "image",
           payload: { url, alt },
+          phase,
           rawType: part?.rawType || ""
         })
       );
@@ -633,12 +706,13 @@ function appendNormalizedParts(parts = []) {
       if (!text) {
         continue;
       }
-      finalizeAssistantStream();
+      finalizeAssistantStream(sessionId);
       messages.push(
         createMessage(role || "assistant", text, ts, {
           source: part?.source || "message_part",
           partType,
           payload,
+          phase,
           rawType: part?.rawType || ""
         })
       );
@@ -650,9 +724,9 @@ function appendNormalizedParts(parts = []) {
     // Streaming chunks mutate `state.activeMessages` in appendAssistantChunk.
     // If we always overwrite with the stale local `messages`, live text disappears until refresh.
     if (hasStreamingUpdate) {
-      messages = [...state.activeMessages];
+      messages = getSessionMessages(sessionId);
     }
-    state.activeMessages = messages;
+    storeSessionMessages(sessionId, messages);
   }
 }
 
@@ -719,7 +793,10 @@ async function hydrateSession(session, { includeMessages = false, silent = false
 }
 
 async function refreshSessions() {
-  const payload = await request("/api/sessions");
+  const [payload, projectsPayload] = await Promise.all([
+    request("/api/sessions"),
+    request("/api/projects").catch(() => ({ projects: [] }))
+  ]);
   const sessions = payload.sessions || [];
   for (const session of sessions) {
     const key = cacheKey(session);
@@ -733,15 +810,16 @@ async function refreshSessions() {
     };
   }
   state.sessions = sessions;
+  state.projects = projectsPayload.projects || [];
 }
 
 function toWsProtocol(proto) {
   return String(proto || "").toLowerCase() === "https:" ? "wss:" : "ws:";
 }
 
-function resolveWsUrl(sessionId) {
+function resolveWsUrl(sessionId, sinceSeq = 0) {
   const protocol = toWsProtocol(window.location.protocol);
-  return `${protocol}//${window.location.host}/ws?sessionId=${encodeURIComponent(sessionId)}`;
+  return `${protocol}//${window.location.host}/ws?sessionId=${encodeURIComponent(sessionId)}&sinceSeq=${encodeURIComponent(sinceSeq)}`;
 }
 
 async function bootstrapWorkspace({ includeSessions = true } = {}) {
@@ -806,6 +884,18 @@ function closeSocket() {
   }
 }
 
+function closeAllSockets() {
+  for (const socket of liveSockets.values()) {
+    try {
+      socket.close();
+    } catch {
+      // Ignore close failures during teardown.
+    }
+  }
+  liveSockets.clear();
+  closeSocket();
+}
+
 function waitForSocketOpen(socket, timeoutMs = 4000) {
   if (socket.readyState === WebSocket.OPEN) {
     return Promise.resolve();
@@ -846,12 +936,19 @@ function waitForSocketOpen(socket, timeoutMs = 4000) {
 }
 
 function attachLiveSocket(sessionId, historyMessages = []) {
-  closeSocket();
-  finalizeAssistantStream();
+  const existing = liveSockets.get(sessionId);
+  if (existing && existing.readyState === WebSocket.OPEN) {
+    state.activeLiveSessionId = sessionId;
+    state.activeSocket = existing;
+    state.activeMessages = state.sessionMessages[sessionId] || state.activeMessages;
+    return Promise.resolve();
+  }
+  finalizeAssistantStream(state.activeSessionId);
   state.activeLiveSessionId = sessionId;
-  state.activeStreamBuffer = "";
+  setStreamBuffer(sessionId, "");
   state.approvalRequests = [];
-  const socket = new WebSocket(resolveWsUrl(sessionId));
+  const socket = new WebSocket(resolveWsUrl(sessionId, state.lastSeqBySession[sessionId] || 0));
+  liveSockets.set(sessionId, socket);
   state.activeSocket = socket;
 
   socket.addEventListener("message", (event) => {
@@ -873,8 +970,8 @@ function attachLiveSocket(sessionId, historyMessages = []) {
           .reverse()
           .find((message) => message.role === "assistant");
         if (normalizeLine(String(lastAssistant?.text || "")) !== normalizedSnapshot) {
-          setMessages([
-            ...state.activeMessages,
+          storeSessionMessages(sessionId, [
+            ...getSessionMessages(sessionId),
             createMessage("assistant", normalizedSnapshot, new Date().toISOString(), {
               source: "snapshot"
             })
@@ -895,8 +992,8 @@ function attachLiveSocket(sessionId, historyMessages = []) {
 
     if (payload.type === "session_updated" && payload.session) {
       const updated = decorateSession(payload.session);
-      state.activeSessionMeta = updated;
       if (state.activeSessionId === updated.id) {
+        state.activeSessionMeta = updated;
         state.activeLiveSessionId = updated.id;
       }
       const index = state.sessions.findIndex((item) => item.id === updated.id);
@@ -905,6 +1002,23 @@ function attachLiveSocket(sessionId, historyMessages = []) {
         next[index] = updated;
         state.sessions = next;
       }
+      return;
+    }
+
+    if (payload.seq) {
+      state.lastSeqBySession[sessionId] = Math.max(Number(state.lastSeqBySession[sessionId] || 0), Number(payload.seq || 0));
+    }
+
+    if (payload.type === "session_meta" && payload.meta) {
+      state.sessionMetas[sessionId] = payload.meta;
+      if (state.activeSessionId === sessionId) {
+        state.activeSessionMeta = { ...(state.activeSessionMeta || {}), ...payload.meta };
+      }
+      return;
+    }
+
+    if (payload.type === "stall_warning") {
+      state.stallWarnings[sessionId] = payload;
       return;
     }
 
@@ -921,7 +1035,7 @@ function attachLiveSocket(sessionId, historyMessages = []) {
       if (payload.data && String(payload.data).trim()) {
         clearPendingReplyStatus();
       }
-      appendNormalizedParts(normalizeServerPayload(payload, state.activeSessionId));
+      appendNormalizedParts(normalizeServerPayload(payload, sessionId), sessionId);
       return;
     }
 
@@ -929,12 +1043,12 @@ function attachLiveSocket(sessionId, historyMessages = []) {
       if (payload?.part?.type === "text" && String(payload?.part?.text || "").trim()) {
         clearPendingReplyStatus();
       }
-      appendNormalizedParts(normalizeServerPayload(payload, state.activeSessionId));
+      appendNormalizedParts(normalizeServerPayload(payload, sessionId), sessionId);
       return;
     }
 
     if (payload.type === "event_msg") {
-      appendNormalizedParts(normalizeServerPayload(payload, state.activeSessionId));
+      appendNormalizedParts(normalizeServerPayload(payload, sessionId), sessionId);
       return;
     }
 
@@ -951,13 +1065,13 @@ function attachLiveSocket(sessionId, historyMessages = []) {
           source: "ws_error",
           rawType: "error"
         }
-      ]);
+      ], sessionId);
       setStatus(errorText);
       return;
     }
 
     if (payload.type === "exit") {
-      finalizeAssistantStream();
+      finalizeAssistantStream(sessionId);
       const exitCode = Number(payload.exitCode ?? 0);
       if (state.statusText === "已发送中断指令。") {
         setStatus("当前流程已中断。");
@@ -974,13 +1088,12 @@ function attachLiveSocket(sessionId, historyMessages = []) {
   });
 
   socket.addEventListener("close", () => {
-    if (state.activeSocket !== socket) {
-      return;
+    liveSockets.delete(sessionId);
+    if (state.activeSocket === socket) {
+      clearSocketHeartbeat();
+      state.activeSocket = null;
     }
-
-    clearSocketHeartbeat();
-    state.activeSocket = null;
-    finalizeAssistantStream();
+    finalizeAssistantStream(sessionId);
     if (state.statusText === "已发送中断指令。") {
       setStatus("当前流程已中断。");
       return;
@@ -1016,8 +1129,9 @@ async function openLiveSession(session, { skipRoute = false } = {}) {
   const decorated = decorateSession(session);
   state.activeSessionMeta = decorated;
   bumpActiveSessionOpenToken();
-  if (!skipRoute && route.name !== "chat") {
-    await router.push({ name: "chat", params: { sessionId: session.id } });
+  if (!skipRoute && route.params.sessionId !== session.id) {
+    const projectId = session.projectId || state.activeSessionMeta?.projectId || "";
+    await router.push(projectId ? { name: "project-chat", params: { projectId, sessionId: session.id } } : { name: "chat", params: { sessionId: session.id } });
   }
   composerDraft.value = "";
   state.replayGuardActive = false;
@@ -1046,7 +1160,7 @@ async function openLiveSession(session, { skipRoute = false } = {}) {
       };
     }
   }
-  setMessages(historyMessages);
+  setMessages(state.sessionMessages[session.id] || historyMessages, session.id);
   await attachLiveSocket(session.id, historyMessages);
   setStatus("");
   state.pendingSessionId = "";
@@ -1069,14 +1183,15 @@ async function openHistoricalSession(session, { skipRoute = false } = {}) {
     displayPreview: hydrated?.preview || decorated.displayPreview
   };
   bumpActiveSessionOpenToken();
-  if (!skipRoute && route.name !== "chat") {
-    await router.push({ name: "chat", params: { sessionId: session.id } });
+  if (!skipRoute && route.params.sessionId !== session.id) {
+    const projectId = session.projectId || state.activeSessionMeta?.projectId || "";
+    await router.push(projectId ? { name: "project-chat", params: { projectId, sessionId: session.id } } : { name: "chat", params: { sessionId: session.id } });
   }
   composerDraft.value = "";
   state.replayGuardActive = false;
   state.replayGuardPrompt = "";
   state.replayGuardUntil = 0;
-  setMessages(historyMessages);
+  setMessages(historyMessages, session.id);
   state.activeLiveSessionId = "";
   setStatus("");
   state.pendingSessionId = "";
@@ -1320,7 +1435,7 @@ async function submitInput() {
     setMessages([
       ...state.activeMessages,
       createMessage("user", text, new Date().toISOString(), { source: "draft" })
-    ]);
+    ], state.activeSessionId);
     composerDraft.value = "";
     setStatus("等待 Codex 回复…");
   } catch (error) {
@@ -1340,6 +1455,88 @@ function handleApprovalDecision(payload) {
   setStatus(payload.decision === "deny" ? "已拒绝操作。" : "已允许操作。");
 }
 
+async function loadRawEvents(sessionId = state.activeLiveSessionId || state.activeSessionMeta?.id) {
+  const id = String(sessionId || "").trim();
+  if (!id) {
+    return;
+  }
+  try {
+    const payload = await request(`/api/sessions/${encodeURIComponent(id)}/raw-events?limit=50`);
+    state.rawEventsBySession[id] = payload.events || [];
+  } catch (error) {
+    setStatus(error?.message || String(error));
+  }
+}
+
+async function pingActiveRunner() {
+  const id = String(state.activeLiveSessionId || state.activeSessionMeta?.id || "").trim();
+  if (!id) {
+    return;
+  }
+  try {
+    const payload = await request(`/api/sessions/${encodeURIComponent(id)}/ping`, { method: "POST" });
+    state.sessionMetas[id] = payload.meta || state.sessionMetas[id] || {};
+    state.stallWarnings[id] = null;
+  } catch (error) {
+    setStatus(error?.message || String(error));
+  }
+}
+
+async function restartActiveRunner() {
+  const id = String(state.activeLiveSessionId || state.activeSessionMeta?.id || "").trim();
+  if (!id) {
+    return;
+  }
+  try {
+    const payload = await request(`/api/sessions/${encodeURIComponent(id)}/restart`, { method: "POST" });
+    if (payload.session) {
+      state.activeSessionMeta = decorateSession(payload.session);
+    }
+    state.stallWarnings[id] = null;
+    await refreshSessions();
+  } catch (error) {
+    setStatus(error?.message || String(error));
+  }
+}
+
+async function openCodexThreadPicker() {
+  try {
+    const payload = await request("/api/codex-threads?limit=50");
+    state.codexThreads = payload.threads || [];
+    state.codexThreadPickerOpen = true;
+  } catch (error) {
+    setStatus(error?.message || String(error));
+  }
+}
+
+async function resumeCodexThread(thread) {
+  const threadId = String(thread?.threadId || "").trim();
+  if (!threadId) {
+    return;
+  }
+  try {
+    state.pendingSessionId = "__creating__";
+    const payload = await request("/api/sessions", {
+      method: "POST",
+      body: JSON.stringify({
+        provider: "codex",
+        cwd: thread.cwd || state.activeSessionMeta?.cwd || "",
+        name: thread.label || "本机 Codex 会话",
+        resumeThreadId: threadId
+      })
+    });
+    state.codexThreadPickerOpen = false;
+    await refreshSessions();
+    if (payload.session) {
+      await openSessionItem(payload.session);
+    }
+  } catch (error) {
+    setStatus(error?.message || String(error));
+  } finally {
+    state.pendingSessionId = "";
+  }
+}
+
 function interruptActiveSession() {
   clearSubmitFallbackTimer();
   if (!state.activeSocket || state.activeSocket.readyState !== WebSocket.OPEN) {
@@ -1357,7 +1554,6 @@ function interruptActiveSession() {
 
 async function backToList() {
   clearSubmitFallbackTimer();
-  closeSocket();
   finalizeAssistantStream();
   state.replayGuardActive = false;
   state.replayGuardPrompt = "";
@@ -1381,7 +1577,6 @@ watch(
   () => route.name,
   async (name) => {
     if (name === "sessions") {
-      closeSocket();
       finalizeAssistantStream();
       if (state.isAuthenticated) {
         try {
@@ -1419,7 +1614,7 @@ watch(
       return;
     }
 
-    if (routeName !== "chat") {
+    if (routeName !== "chat" && routeName !== "project-chat") {
       return;
     }
 
@@ -1486,6 +1681,7 @@ watch(
 onMounted(async () => {
   window.addEventListener("focus", handlePageBecameActive);
   window.addEventListener("online", handlePageBecameActive);
+  window.addEventListener("keydown", handleGlobalKeydown);
   document.addEventListener("visibilitychange", handlePageBecameActive);
   try {
     const savedToken = getSavedToken();
@@ -1511,8 +1707,9 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   window.removeEventListener("focus", handlePageBecameActive);
   window.removeEventListener("online", handlePageBecameActive);
+  window.removeEventListener("keydown", handleGlobalKeydown);
   document.removeEventListener("visibilitychange", handlePageBecameActive);
-  closeSocket();
+  closeAllSockets();
 });
 
 if (typeof window !== 'undefined') {
@@ -1555,13 +1752,14 @@ if (typeof window !== 'undefined') {
           @open="openSessionItem"
           @create-group-session="createSessionInGroup"
           @delete-session="deleteSessionItem"
+          @open-codex-threads="openCodexThreadPicker"
         />
 
         <div v-if="state.statusText" class="notice-strip">{{ state.statusText }}</div>
       </section>
 
       <ChatView
-        v-else-if="route.name === 'chat' && state.activeSessionMeta"
+        v-else-if="(route.name === 'chat' || route.name === 'project-chat') && state.activeSessionMeta"
         :session-key="state.activeSessionMeta?.resumeSessionId || state.activeSessionMeta?.id || ''"
         :open-token="state.activeSessionOpenToken"
         :title="activeSessionTitle"
@@ -1575,6 +1773,9 @@ if (typeof window !== 'undefined') {
         :can-send="canSend"
         :can-interrupt="canInterrupt"
         :loading="state.loading"
+        :session-meta="activeMeta"
+        :stall-warning="activeStallWarning"
+        :raw-events="activeRawEvents"
         :status-text="connectionNotice || state.statusText"
         :approval-requests="state.approvalRequests"
         @back="backToList"
@@ -1582,12 +1783,54 @@ if (typeof window !== 'undefined') {
         @create-sibling-session="createSessionFromCurrentWorkspace"
         @delete-session="deleteSessionItem(state.activeSessionMeta)"
         @approval-decision="handleApprovalDecision"
+        @ping-runner="pingActiveRunner"
+        @show-raw-events="loadRawEvents()"
+        @restart-runner="restartActiveRunner"
         @submit="submitInput"
       />
 
       <section v-else class="mobile-shell centered-shell">
         <div class="splash-card">正在加载会话页面…</div>
       </section>
+
+      <aside v-if="state.codexThreadPickerOpen" class="thread-picker">
+        <header>
+          <h2>本机 Codex 会话</h2>
+          <button type="button" @click="state.codexThreadPickerOpen = false">关闭</button>
+        </header>
+        <button
+          v-for="thread in state.codexThreads"
+          :key="thread.threadId"
+          class="thread-row"
+          type="button"
+          @click="resumeCodexThread(thread)"
+        >
+          <span class="source-badge">{{ thread.source === "tui" ? "TUI" : thread.source === "web" ? "web" : "?" }}</span>
+          <span class="thread-copy">
+            <strong>{{ thread.label || thread.threadId }}</strong>
+            <small>{{ thread.cwd }} · {{ formatRelativeTime(thread.createdAt) }}</small>
+          </span>
+        </button>
+      </aside>
+
+      <aside v-if="state.commandPaletteOpen" class="command-palette">
+        <header>
+          <h2>快速跳转</h2>
+          <button type="button" @click="state.commandPaletteOpen = false">关闭</button>
+        </header>
+        <button class="command-row" type="button" @click="state.commandPaletteOpen = false; openCodexThreadPicker()">
+          打开本机 Codex 会话
+        </button>
+        <button
+          v-for="session in state.sessions.slice(0, 12).map(decorateSession)"
+          :key="session.id"
+          class="command-row"
+          type="button"
+          @click="state.commandPaletteOpen = false; openSessionItem(session)"
+        >
+          {{ session.displayTitle }} · {{ session.groupName }}
+        </button>
+      </aside>
     </template>
   </div>
 </template>

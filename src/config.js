@@ -91,9 +91,15 @@ export const config = {
   trustedCidrs: listEnv("TRUSTED_CIDRS"),
   wsHeartbeatMs: intEnv("WS_HEARTBEAT_SECONDS", 30) * 1000,
   sessionBufferLimit: 250000,
+  sessionEventBufferSize: intEnv("SESSION_EVENT_BUFFER_SIZE", 500),
+  sessionEventBufferTtlMs: intEnv("SESSION_EVENT_BUFFER_TTL_MINUTES", 5) * 60 * 1000,
+  sessionDetachedTtlMs: intEnv("SESSION_DETACHED_TTL_HOURS", 6) * 60 * 60 * 1000,
+  stallWarningMs: intEnv("SESSION_STALL_WARNING_SECONDS", 30) * 1000,
   maxQueuedInputs: intEnv("MAX_QUEUED_INPUTS", 200),
   dataDir: path.join(root, "data"),
-  codexSessionsDir: env("CODEX_SESSIONS_DIR", path.join(home, ".codex", "sessions")),
+  heaticyDataDir: env("HEATICY_CODEX_HOME", path.join(home, ".heaticy-codex")),
+  codexHome: env("CODEX_HOME", path.join(home, ".codex")),
+  codexSessionsDir: env("CODEX_SESSIONS_DIR", path.join(env("CODEX_HOME", path.join(home, ".codex")), "sessions")),
   ccSessionsDir: env("CC_SESSIONS_DIR", path.join(home, ".claude", "projects")),
   timezone: env("DISPLAY_TIMEZONE", "Australia/Melbourne")
 };

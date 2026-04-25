@@ -4,7 +4,9 @@ import path from "node:path";
 
 import { ApprovalManager } from "./approvals.js";
 import { AuditLogger } from "./audit.js";
+import { CodexRolloutIndex } from "./codexRollout.js";
 import { MessageBus } from "./messageBus.js";
+import { ProjectStore } from "./projects.js";
 import { AppServerRunner } from "./runners/appServerRunner.js";
 import { JsonExecRunner } from "./runners/jsonExecRunner.js";
 import { PtyRunner } from "./runners/ptyRunner.js";
@@ -14,6 +16,22 @@ const shortTimeFormatterCache = new Map();
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function isoFromMs(value) {
+  return new Date(value).toISOString();
+}
+
+function isRunningTurn(session) {
+  return Boolean(session?.turnRunning || session?.runningProcess || (session?.queuedInputs || []).length);
+}
+
+function boundedPush(array, item, limit) {
+  array.push(item);
+  const overflow = array.length - Math.max(1, Number(limit) || 1);
+  if (overflow > 0) {
+    array.splice(0, overflow);
+  }
 }
 
 function getShortTimeFormatter(timezone) {
@@ -1287,6 +1305,11 @@ export class SessionManager {
     this.messageBus = new MessageBus();
     this.approvals = new ApprovalManager(config);
     this.audit = new AuditLogger(config);
+    this.projectStore = new ProjectStore(path.join(this.config.heaticyDataDir, "projects.json"));
+    this.rolloutIndex = new CodexRolloutIndex({
+      codexHome: this.config.codexHome,
+      dataDir: this.config.heaticyDataDir
+    });
     this.pendingApprovals = new Map();
     this.turnCounters = { completed: 0, failed: 0 };
     this.approvalCounters = { allow: 0, deny: 0, auto_allow: 0 };
@@ -1307,6 +1330,9 @@ export class SessionManager {
         .filter((entry) => entry[0] && entry[1])
     );
     fs.mkdirSync(this.config.dataDir, { recursive: true });
+    fs.mkdirSync(this.config.heaticyDataDir, { recursive: true });
+    this.maintenanceTimer = setInterval(() => this.runSessionMaintenance(), 5_000);
+    this.maintenanceTimer.unref?.();
     if (this.appServerBridge) {
       this.appServerBridge.on("notification", (msg) => this.handleAppServerNotification(msg));
       this.appServerBridge.on("log", (line) => {
@@ -1475,6 +1501,7 @@ export class SessionManager {
     const resolvedProvider = this.getProvider(provider);
     const id = crypto.randomUUID();
     const resolvedCwd = this.resolveCwd(cwd);
+    const project = this.projectStore.ensureForCwd(resolvedCwd);
     const fallbackName = `${resolvedProvider.fallbackPrefix}-${this.sessions.size + 1}`;
     const sessionName = normalizeName(name, fallbackName);
     const spawnSpec = resolvedProvider.buildSpawnSpec({
@@ -1497,8 +1524,20 @@ export class SessionManager {
         status: "running",
         createdAt: nowIso(),
         updatedAt: nowIso(),
+        lifecycle: "detached",
+        closedAt: "",
+        detachedAt: nowIso(),
+        projectId: project.id,
         exitCode: null,
         clients: new Set(),
+        seq: 0,
+        eventBuffer: [],
+        rawEvents: [],
+        lastEventAt: nowIso(),
+        turnState: String(resumeSessionId || "").trim() ? "resumed" : "idle",
+        activity: "",
+        stallWarningActive: false,
+        lastStallWarningAt: "",
         autoNamed: !String(name || "").trim(),
         fallbackName,
         inputPreview: "",
@@ -1544,8 +1583,20 @@ export class SessionManager {
       status: "starting",
       createdAt: nowIso(),
       updatedAt: nowIso(),
+      lifecycle: "detached",
+      closedAt: "",
+      detachedAt: nowIso(),
+      projectId: project.id,
       exitCode: null,
       clients: new Set(),
+      seq: 0,
+      eventBuffer: [],
+      rawEvents: [],
+      lastEventAt: nowIso(),
+      turnState: "idle",
+      activity: "",
+      stallWarningActive: false,
+      lastStallWarningAt: "",
       autoNamed: !String(name || "").trim(),
       fallbackName,
       inputPreview: "",
@@ -1565,7 +1616,7 @@ export class SessionManager {
 
     shell.onData((chunk) => {
       session.status = "running";
-      session.updatedAt = nowIso();
+      this.touchSessionEvent(session, { turnState: "executing", activity: "PTY 输出中" });
       this.maybeAutoAdvanceClaudeStartup(session);
 
       const visibleChunk = filterLiveOutputChunk(session, chunk);
@@ -1588,45 +1639,39 @@ export class SessionManager {
         session.buffer = session.buffer.slice(-this.config.sessionBufferLimit);
       }
 
-      for (const client of session.clients) {
-        if (textChunk) {
-          client.send(
-            JSON.stringify({
-              type: "message_part",
-              role: "assistant",
-              part: {
-                type: "text",
-                text: textChunk,
-                format: "terminal_raw"
-              },
-              phase: "streaming",
-              timestamp: nowIso()
-            })
-          );
-        }
-        for (const image of images) {
-          client.send(
-            JSON.stringify({
-              type: "message_part",
-              role: "assistant",
-              part: image,
-              timestamp: nowIso()
-            })
-          );
-        }
+      if (textChunk) {
+        this.broadcast(session, {
+          type: "message_part",
+          role: "assistant",
+          part: {
+            type: "text",
+            text: textChunk,
+            format: "terminal_raw"
+          },
+          phase: "streaming",
+          timestamp: nowIso()
+        });
+      }
+      for (const image of images) {
+        this.broadcast(session, {
+          type: "message_part",
+          role: "assistant",
+          part: image,
+          timestamp: nowIso()
+        });
       }
     });
 
     shell.onExit(({ exitCode }) => {
       session.exitCode = exitCode;
       session.status = "exited";
-      session.updatedAt = nowIso();
+      session.lifecycle = "closed";
+      session.closedAt = nowIso();
+      this.touchSessionEvent(session, { turnState: "idle", activity: "" });
       if (!this.persistSessionName(session)) {
         this.scheduleDeferredNamePersistence(session);
       }
-      for (const client of session.clients) {
-        client.send(JSON.stringify({ type: "exit", exitCode }));
-      }
+      this.broadcast(session, { type: "exit", exitCode });
     });
 
     this.sessions.set(id, session);
@@ -1644,8 +1689,87 @@ export class SessionManager {
     }
   }
 
+  touchSessionEvent(session, { turnState = "", activity = "", raw = null } = {}) {
+    if (!session) {
+      return;
+    }
+    session.lastEventAt = nowIso();
+    session.updatedAt = session.lastEventAt;
+    session.stallWarningActive = false;
+    if (turnState) {
+      session.turnState = turnState;
+    }
+    if (activity !== undefined) {
+      session.activity = String(activity || "");
+    }
+    if (raw) {
+      boundedPush(session.rawEvents, { seq: session.seq || 0, ts: session.lastEventAt, raw }, 50);
+    }
+  }
+
+  getRunnerForSession(session) {
+    if (session?.runnerMode === "app_server") {
+      return this.appServerRunner;
+    }
+    if (session?.runnerMode === "json_exec") {
+      return this.jsonExecRunner;
+    }
+    return this.ptyRunner;
+  }
+
+  getSessionMeta(session) {
+    const runner = this.getRunnerForSession(session);
+    const meta = runner.getMeta(session);
+    return {
+      id: session.id,
+      projectId: session.projectId || "",
+      model: meta.model || "default",
+      cwd: meta.cwd || session.cwd || "",
+      profile: meta.profile || "",
+      transport: meta.transport || "unknown",
+      turnState: session.turnState || meta.turnState || "idle",
+      activity: session.activity || "",
+      lastEventAt: session.lastEventAt || meta.lastEventAt || session.updatedAt || "",
+      attachedClients: session.clients?.size || 0,
+      lifecycle: session.lifecycle || "detached",
+      resumeSessionId: session.resumeSessionId || ""
+    };
+  }
+
+  broadcastMeta(session) {
+    this.broadcast(session, {
+      type: "session_meta",
+      meta: this.getSessionMeta(session),
+      timestamp: nowIso()
+    });
+  }
+
   broadcast(session, payload) {
-    this.messageBus.broadcast(session, payload);
+    const current = nowIso();
+    const event = {
+      ...payload,
+      seq: (session.seq || 0) + 1,
+      timestamp: payload.timestamp || current
+    };
+    session.seq = event.seq;
+    boundedPush(session.eventBuffer, event, this.config.sessionEventBufferSize);
+    const cutoff = Date.now() - Math.max(1_000, Number(this.config.sessionEventBufferTtlMs) || 300_000);
+    session.eventBuffer = session.eventBuffer.filter((item) => Date.parse(item.timestamp || current) >= cutoff);
+    this.messageBus.broadcast(session, event);
+  }
+
+  replayBufferedEvents(session, ws, sinceSeq = 0) {
+    const minSeq = Math.max(0, Number(sinceSeq) || 0);
+    for (const event of session.eventBuffer || []) {
+      if (Number(event.seq || 0) <= minSeq) {
+        continue;
+      }
+      try {
+        ws.send(JSON.stringify({ ...event, replayed: true }));
+      } catch {
+        return;
+      }
+    }
   }
 
   broadcastItemEvent(session, item, { phase = "final", rawType = "" } = {}) {
@@ -1657,6 +1781,25 @@ export class SessionManager {
     if (!text) {
       return false;
     }
+    const nextTurnState =
+      kind === "reasoning"
+        ? "thinking"
+        : kind === "command_exec" || kind === "command_output" || kind === "file_change" || kind === "mcp_tool_call"
+          ? "executing"
+          : kind === "error"
+            ? "error"
+            : "";
+    const activity =
+      kind === "reasoning"
+        ? "正在思考"
+        : kind === "command_exec" || kind === "command_output"
+          ? `正在执行: ${String(item?.command || text).split("\n")[0].slice(0, 120)}`
+          : kind === "file_change"
+            ? `正在写 ${String(text).split("\n")[0].slice(0, 120)}`
+            : kind === "mcp_tool_call"
+              ? `正在调用 ${item?.tool || "MCP 工具"}`
+              : "";
+    this.touchSessionEvent(session, { turnState: nextTurnState, activity, raw: { type: rawType || phase, item } });
     this.broadcast(session, {
       type: "message_part",
       role: kind === "error" ? "system" : "assistant",
@@ -1681,13 +1824,16 @@ export class SessionManager {
     return true;
   }
 
-  attachClient(id, ws) {
+  attachClient(id, ws, { sinceSeq = 0 } = {}) {
     const session = this.get(id);
     if (!session) {
       throw new Error(`Session not found: ${id}`);
     }
 
     session.clients.add(ws);
+    session.lifecycle = "attached";
+    session.detachedAt = "";
+    session.updatedAt = nowIso();
     ws.send(
       JSON.stringify({
         type: "snapshot",
@@ -1695,9 +1841,22 @@ export class SessionManager {
         buffer: session.buffer
       })
     );
+    ws.send(
+      JSON.stringify({
+        type: "session_meta",
+        meta: this.getSessionMeta(session),
+        timestamp: nowIso()
+      })
+    );
+    this.replayBufferedEvents(session, ws, sinceSeq);
 
     ws.on("close", () => {
       session.clients.delete(ws);
+      if (session.clients.size === 0 && session.status !== "exited") {
+        session.lifecycle = "detached";
+        session.detachedAt = nowIso();
+        session.updatedAt = session.detachedAt;
+      }
     });
   }
 
@@ -1723,7 +1882,8 @@ export class SessionManager {
     for (const line of lines) {
       session.queuedInputs.push(line);
     }
-    session.updatedAt = nowIso();
+    this.touchSessionEvent(session, { turnState: "thinking", activity: "正在排队" });
+    this.broadcastMeta(session);
     if (session.runnerMode === "app_server") {
       this.maybeStartAppServerTurn(session);
       return;
@@ -1745,21 +1905,29 @@ export class SessionManager {
     session.turnRunning = true;
     session.turnHadVisibleOutput = false;
     session.turnNoReplyNotified = false;
-    session.updatedAt = nowIso();
+    this.touchSessionEvent(session, { turnState: "thinking", activity: "正在思考" });
+    this.broadcastMeta(session);
     try {
       const result = await this.appServerRunner.startTurn(session, prompt);
+      if (session.resumeSessionId) {
+        this.rolloutIndex.markWebThread(session.resumeSessionId, {
+          projectId: session.projectId || "",
+          label: session.name || session.inputPreview || ""
+        });
+      }
       this.handleAppServerTurnResult(session, result);
       this.turnCounters.completed += 1;
       session.status = "running";
       session.appServerReconnectAttempts = 0;
       session.turnRunning = false;
-      session.updatedAt = nowIso();
+      this.touchSessionEvent(session, { turnState: session.queuedInputs.length ? "thinking" : "idle", activity: "" });
       this.broadcast(session, { type: "session_updated", session: this.serialize(session) });
+      this.broadcastMeta(session);
       this.maybeStartAppServerTurn(session);
     } catch (error) {
       session.turnRunning = false;
-      session.updatedAt = nowIso();
       const message = error?.message || String(error);
+      this.touchSessionEvent(session, { turnState: "error", activity: message.slice(0, 160) });
       const canRetry =
         /app-server|websocket|stdio|not connected|send failed|exited|closed/i.test(message) &&
         (session.appServerReconnectAttempts || 0) < 3;
@@ -1768,6 +1936,7 @@ export class SessionManager {
         session.status = "reconnecting";
         session.queuedInputs.unshift(prompt);
         this.broadcast(session, { type: "session_updated", session: this.serialize(session) });
+        this.broadcastMeta(session);
         setTimeout(() => this.maybeStartAppServerTurn(session), 1_000).unref();
         return;
       }
@@ -1780,6 +1949,7 @@ export class SessionManager {
         phase: "final",
         timestamp: nowIso()
       });
+      this.broadcastMeta(session);
       this.maybeStartAppServerTurn(session);
     }
   }
@@ -1826,7 +1996,8 @@ export class SessionManager {
     }
 
     session.runningProcess = { type: "codex_sdk" };
-    session.updatedAt = nowIso();
+    this.touchSessionEvent(session, { turnState: "thinking", activity: "正在思考" });
+    this.broadcastMeta(session);
     let emittedAssistant = false;
 
     try {
@@ -1838,7 +2009,8 @@ export class SessionManager {
       emittedAssistant = emittedAssistant || Boolean(result?.emittedAssistant);
       this.turnCounters.completed += 1;
       session.runningProcess = null;
-      session.updatedAt = nowIso();
+      this.touchSessionEvent(session, { turnState: session.queuedInputs.length ? "thinking" : "idle", activity: "" });
+      this.broadcastMeta(session);
       if (!emittedAssistant) {
         this.broadcast(session, {
           type: "message_part",
@@ -1852,12 +2024,12 @@ export class SessionManager {
       this.turnCounters.failed += 1;
       this.lastErrorAt = nowIso();
       session.runningProcess = null;
-      session.updatedAt = nowIso();
       const concise = String(error?.message || error || "")
         .replace(/<[^>]+>/g, " ")
         .replace(/\s+/g, " ")
         .trim()
         .slice(0, 220);
+      this.touchSessionEvent(session, { turnState: "error", activity: concise });
       this.broadcast(session, {
         type: "message_part",
         role: "system",
@@ -1865,6 +2037,7 @@ export class SessionManager {
         phase: "final",
         timestamp: nowIso()
       });
+      this.broadcastMeta(session);
     } finally {
       this.maybeStartJsonExecRun(session);
     }
@@ -1874,16 +2047,38 @@ export class SessionManager {
     if (!event || typeof event !== "object") {
       return false;
     }
+    this.touchSessionEvent(session, { raw: event });
     if (event.type === "thread.started" && event.thread_id && !session.resumeSessionId) {
       session.resumeSessionId = String(event.thread_id || "").trim() || session.resumeSessionId;
+      this.rolloutIndex.markWebThread(session.resumeSessionId, {
+        projectId: session.projectId || "",
+        label: session.name || session.inputPreview || ""
+      });
       session.updatedAt = nowIso();
       this.broadcast(session, {
         type: "session_updated",
         session: this.serialize(session)
       });
+      this.broadcastMeta(session);
     }
     if (event.type === "item.started" || event.type === "item.updated") {
       const item = event.item || {};
+      if (isAgentMessageType(item?.type)) {
+        const text = String(item.text || item.delta || "").trim();
+        if (!text) {
+          return false;
+        }
+        session.turnHadVisibleOutput = true;
+        this.pushSessionBuffer(session, text);
+        this.broadcast(session, {
+          type: "message_part",
+          role: "assistant",
+          part: { type: "text", text, format: "markdown" },
+          phase: "streaming",
+          timestamp: nowIso()
+        });
+        return true;
+      }
       return this.broadcastItemEvent(session, item, {
         phase: event.type === "item.started" ? "started" : "streaming",
         rawType: event.type
@@ -1930,7 +2125,7 @@ export class SessionManager {
     }
 
     for (const session of targets) {
-      session.updatedAt = nowIso();
+      this.touchSessionEvent(session, { raw: msg });
       const item = params?.item || {};
       const itemType = String(item?.type || params?.itemType || "").trim();
       if (method === "item/agentMessage/delta" || normalizedMethod === "itemagentmessagedelta") {
@@ -1938,6 +2133,7 @@ export class SessionManager {
         if (!delta.trim()) {
           continue;
         }
+        this.touchSessionEvent(session, { turnState: "thinking", activity: "正在输出回复" });
         session.turnHadVisibleOutput = true;
         this.pushSessionBuffer(session, delta);
         this.broadcast(session, {
@@ -1993,6 +2189,8 @@ export class SessionManager {
           );
           emitNoReplyFallback(this, session);
         }
+        this.touchSessionEvent(session, { turnState: session.queuedInputs.length ? "thinking" : "idle", activity: "" });
+        this.broadcastMeta(session);
         continue;
       }
       if (
@@ -2064,6 +2262,11 @@ export class SessionManager {
     }, 10 * 60 * 1000);
     timer.unref();
     this.pendingApprovals.set(id, { ...request, sessionId: session.id, detail, timer });
+    this.touchSessionEvent(session, {
+      turnState: "waiting_approval",
+      activity: `等待审批: ${detail.command || detail.path || request.kind}`
+    });
+    this.broadcastMeta(session);
     this.broadcast(session, {
       type: "approval_request",
       request: {
@@ -2109,6 +2312,11 @@ export class SessionManager {
       detail: { decision: accepted ? "allow" : "deny", remember: Boolean(remember), request: pending.detail }
     });
     pending.resolve(accepted ? this.approvalAcceptPayload(pending.kind) : pending.fallback);
+    const session = this.get(sessionId);
+    if (session) {
+      this.touchSessionEvent(session, { turnState: isRunningTurn(session) ? "executing" : "idle", activity: "" });
+      this.broadcastMeta(session);
+    }
     return true;
   }
 
@@ -2134,7 +2342,8 @@ export class SessionManager {
     }
 
     session.shell.write(text);
-    session.updatedAt = nowIso();
+    this.touchSessionEvent(session, { turnState: "executing", activity: "已写入 stdin" });
+    this.broadcastMeta(session);
   }
 
   resize(id, cols, rows) {
@@ -2171,6 +2380,8 @@ export class SessionManager {
     }
 
     session.status = "closing";
+    session.lifecycle = "closed";
+    session.closedAt = nowIso();
     session.updatedAt = nowIso();
     try {
       if (session.runnerMode === "json_exec" || session.runnerMode === "app_server") {
@@ -2186,6 +2397,98 @@ export class SessionManager {
     }
     this.sessions.delete(id);
     return true;
+  }
+
+  runSessionMaintenance() {
+    const now = Date.now();
+    const detachedTtlMs = Math.max(60_000, Number(this.config.sessionDetachedTtlMs) || 21_600_000);
+    const stallMs = Math.max(5_000, Number(this.config.stallWarningMs) || 30_000);
+    for (const session of [...this.sessions.values()]) {
+      if (session.status === "exited" || session.lifecycle === "closed") {
+        continue;
+      }
+      if (session.clients.size === 0 && session.lifecycle !== "detached") {
+        session.lifecycle = "detached";
+        session.detachedAt = nowIso();
+      }
+      if (session.lifecycle === "detached") {
+        const detachedAt = Date.parse(session.detachedAt || session.updatedAt || session.createdAt || "");
+        if (Number.isFinite(detachedAt) && now - detachedAt > detachedTtlMs && !isRunningTurn(session)) {
+          this.close(session.id);
+          continue;
+        }
+      }
+      const lastEventMs = Date.parse(session.lastEventAt || session.updatedAt || "");
+      const turnState = String(session.turnState || "idle");
+      if (turnState !== "idle" && turnState !== "resumed" && Number.isFinite(lastEventMs) && now - lastEventMs > stallMs) {
+        const lastWarnMs = Date.parse(session.lastStallWarningAt || "");
+        if (!Number.isFinite(lastWarnMs) || now - lastWarnMs > stallMs) {
+          session.stallWarningActive = true;
+          session.lastStallWarningAt = isoFromMs(now);
+          this.broadcast(session, {
+            type: "stall_warning",
+            meta: this.getSessionMeta(session),
+            stalledForMs: now - lastEventMs,
+            timestamp: nowIso()
+          });
+        }
+      }
+    }
+  }
+
+  listProjects() {
+    return this.projectStore.list();
+  }
+
+  listCodexThreads({ limit = 50 } = {}) {
+    return this.rolloutIndex.listThreads({ limit });
+  }
+
+  getRawEvents(id, { limit = 50 } = {}) {
+    const session = this.get(id);
+    if (!session) {
+      throw new Error(`Session not found: ${id}`);
+    }
+    const count = Math.max(1, Math.min(200, Number(limit) || 50));
+    return (session.rawEvents || []).slice(-count);
+  }
+
+  async pingRunner(id) {
+    const session = this.get(id);
+    if (!session) {
+      throw new Error(`Session not found: ${id}`);
+    }
+    if (session.runnerMode === "app_server" && this.appServerBridge) {
+      try {
+        await this.appServerBridge.request("getInfo", {});
+      } catch {
+        await this.appServerBridge.ensureReady();
+      }
+    }
+    this.touchSessionEvent(session, { activity: session.activity || "" });
+    this.broadcastMeta(session);
+    return this.getSessionMeta(session);
+  }
+
+  async restartRunner(id) {
+    const session = this.get(id);
+    if (!session) {
+      throw new Error(`Session not found: ${id}`);
+    }
+    if (session.runnerMode === "json_exec") {
+      this.jsonExecRunner.stop(session);
+      session.runningProcess = null;
+    }
+    if (session.runnerMode === "app_server" && this.appServerBridge) {
+      await this.appServerBridge.shutdown();
+      session.turnRunning = false;
+      session.appServerReconnectAttempts = 0;
+    }
+    this.touchSessionEvent(session, { turnState: "idle", activity: "" });
+    session.status = "running";
+    this.broadcast(session, { type: "session_updated", session: this.serialize(session) });
+    this.broadcastMeta(session);
+    return this.serialize(session);
   }
 
   deleteSession(id, { deleteHistory = false } = {}) {
@@ -2210,6 +2513,10 @@ export class SessionManager {
   }
 
   shutdown() {
+    if (this.maintenanceTimer) {
+      clearInterval(this.maintenanceTimer);
+      this.maintenanceTimer = null;
+    }
     for (const session of [...this.sessions.values()]) {
       try {
         if (session.runnerMode === "json_exec" || session.runnerMode === "app_server") {
@@ -2252,9 +2559,18 @@ export class SessionManager {
       cwd: session.cwd,
       kind: "live",
       status: session.status,
+      lifecycle: session.lifecycle || (session.clients?.size ? "attached" : "detached"),
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
+      projectId: session.projectId || "",
       exitCode: session.exitCode,
+      seq: session.seq || 0,
+      turnState: session.turnState || "idle",
+      lastEventAt: session.lastEventAt || session.updatedAt || "",
+      attachedClients: session.clients?.size || 0,
+      transport: this.getSessionMeta(session).transport,
+      profile: this.getSessionMeta(session).profile,
+      activity: session.activity || "",
       autoNamed: session.autoNamed,
       inputPreview: session.inputPreview,
       resumeSessionId: session.resumeSessionId,

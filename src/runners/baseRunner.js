@@ -23,6 +23,23 @@ export class BaseRunner extends EventEmitter {
     throw new Error("Runner.write() must be implemented by subclasses");
   }
 
+  /**
+   * Return session metadata exposed to the browser status bar.
+   *
+   * Example:
+   * runner.getMeta({ cwd: "/repo", model: "gpt-5-codex" });
+   */
+  getMeta(session = {}) {
+    return {
+      model: session.model || this.config.model || "",
+      cwd: session.cwd || "",
+      profile: this.config.codexProfile || "",
+      transport: session.transport || "unknown",
+      turnState: session.turnState || "idle",
+      lastEventAt: session.lastEventAt || session.updatedAt || ""
+    };
+  }
+
   async stop() {
     this.running = false;
   }

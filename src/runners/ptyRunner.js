@@ -27,6 +27,15 @@ export class PtyRunner extends BaseRunner {
     shell?.write(String(data || ""));
   }
 
+  getMeta(session = {}) {
+    return {
+      ...super.getMeta(session),
+      model: session.model || "",
+      profile: "",
+      transport: "pty"
+    };
+  }
+
   async stop(session) {
     if (session?.shell) {
       session.shell.kill();

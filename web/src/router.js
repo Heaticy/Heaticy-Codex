@@ -19,6 +19,15 @@ const routes = [
     props: true
   },
   {
+    path: "/p/:projectId",
+    name: "project"
+  },
+  {
+    path: "/p/:projectId/s/:sessionId",
+    name: "project-chat",
+    props: true
+  },
+  {
     path: "/:pathMatch(.*)*",
     redirect: "/sessions"
   }
@@ -28,4 +37,3 @@ export const router = createRouter({
   history: createWebHashHistory(),
   routes
 });
-

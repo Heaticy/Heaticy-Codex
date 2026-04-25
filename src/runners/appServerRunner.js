@@ -25,6 +25,15 @@ export class AppServerRunner extends BaseRunner {
     return this.startTurn(session, prompt);
   }
 
+  getMeta(session = {}) {
+    return {
+      ...super.getMeta(session),
+      model: session.model || this.config.codexModel || "",
+      profile: this.config.codexProfile || "",
+      transport: this.bridge?.transport || this.config.codexAppServerTransport || "stdio"
+    };
+  }
+
   async stop() {
     await super.stop();
   }

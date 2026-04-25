@@ -4,6 +4,7 @@ import MarkdownIt from "markdown-it";
 import DOMPurify from "dompurify";
 
 import ApprovalToast from "./ApprovalToast.vue";
+import SessionStatusBar from "./SessionStatusBar.vue";
 
 const BOTTOM_THRESHOLD = 84;
 const MAX_COMPOSER_HEIGHT = 160;
@@ -23,10 +24,13 @@ const props = defineProps({
   canInterrupt: Boolean,
   loading: Boolean,
   statusText: { type: String, default: "" },
+  sessionMeta: { type: Object, default: () => ({}) },
+  stallWarning: { type: Object, default: null },
+  rawEvents: { type: Array, default: () => [] },
   approvalRequests: { type: Array, default: () => [] }
 });
 
-const emit = defineEmits(["back", "update:draft", "submit", "interrupt", "create-sibling-session", "delete-session", "approval-decision"]);
+const emit = defineEmits(["back", "update:draft", "submit", "interrupt", "create-sibling-session", "delete-session", "approval-decision", "ping-runner", "show-raw-events", "restart-runner"]);
 const messageListEl = ref(null);
 const composerEl = ref(null);
 const viewportHeight = ref(0);
@@ -42,6 +46,23 @@ const chatShellStyle = computed(() => ({
 const isRunning = computed(() => Boolean(props.canInterrupt));
 const primaryActionLabel = computed(() => (isRunning.value ? "中断" : "发送"));
 const canPrimaryAction = computed(() => (isRunning.value ? !props.loading : props.canSend && !props.loading));
+const activeActivity = computed(() => {
+  const activity = String(props.sessionMeta?.activity || "").trim();
+  const turnState = String(props.sessionMeta?.turnState || "idle");
+  if (activity) {
+    return activity;
+  }
+  if (turnState === "thinking") {
+    return "正在思考";
+  }
+  if (turnState === "executing") {
+    return "正在执行";
+  }
+  if (turnState === "waiting_approval") {
+    return "等待审批";
+  }
+  return "";
+});
 
 const PROCESS_PATTERNS = [
   /^›/,
@@ -81,13 +102,13 @@ const PROCESS_PATTERNS = [
 ];
 
 const EVENT_LABELS = {
-  reasoning: "Reasoning",
-  command_exec: "Command",
-  command_output: "Output",
-  file_change: "File Change",
-  mcp_tool_call: "MCP Tool",
-  plan_update: "Plan",
-  error: "Error"
+  reasoning: "正在思考",
+  command_exec: "$ 命令",
+  command_output: "命令输出",
+  file_change: "文件改动",
+  mcp_tool_call: "MCP 工具",
+  plan_update: "计划",
+  error: "错误"
 };
 
 function isEventPartType(value) {
@@ -209,6 +230,7 @@ const renderedMessages = computed(() =>
       ...message,
       renderKind,
       eventLabel: EVENT_LABELS[partType] || "Event",
+      eventPhase: message.phase || payload.phase || "",
       imageUrl,
       imageAlt,
       displayText: parts.primary || "",
@@ -422,6 +444,15 @@ onBeforeUnmount(() => {
     </header>
 
     <main class="chat-screen">
+      <SessionStatusBar
+        :meta="sessionMeta"
+        :stall-warning="stallWarning"
+        :raw-events="rawEvents"
+        @ping="emit('ping-runner')"
+        @show-raw="emit('show-raw-events')"
+        @restart="emit('restart-runner')"
+      />
+      <div v-if="activeActivity" class="activity-strip">{{ activeActivity }}</div>
       <section ref="messageListEl" class="message-stream" @scroll="handleStreamScroll">
         <article v-for="message in renderedMessages" :key="message.id" class="message-item" :class="message.role">
           <div v-if="message.renderKind === 'image'" class="message-bubble image-bubble">
@@ -434,7 +465,7 @@ onBeforeUnmount(() => {
 
           <details v-else-if="message.renderKind === 'event'" class="event-card" :open="message.partType === 'reasoning' && !isTouchDevice">
             <summary>
-              <span>{{ message.eventLabel }}</span>
+              <span>{{ message.eventLabel }} <small v-if="message.eventPhase && message.eventPhase !== 'final'">运行中…</small></span>
               <button type="button" @click.prevent="copyText(message.processText)">复制</button>
             </summary>
             <pre class="event-card-text">{{ message.processText }}</pre>
@@ -596,6 +627,16 @@ onBeforeUnmount(() => {
   min-height: calc(100dvh - 72px);
   min-width: 0;
   overflow-x: hidden;
+}
+
+.activity-strip {
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(88, 166, 255, 0.12);
+  background: rgba(15, 23, 42, 0.78);
+  color: #bfdbfe;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .message-stream {

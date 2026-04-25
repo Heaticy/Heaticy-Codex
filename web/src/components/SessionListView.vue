@@ -8,7 +8,7 @@ const props = defineProps({
   formatRelativeTime: { type: Function, required: true }
 });
 
-const emit = defineEmits(["open", "create-group-session", "delete-session"]);
+const emit = defineEmits(["open", "create-group-session", "delete-session", "open-codex-threads"]);
 const expandedGroups = ref(new Set());
 const openMenuGroupName = ref("");
 const openMenuPoint = ref({ x: 0, y: 0 });
@@ -148,6 +148,9 @@ onBeforeUnmount(() => {
 
 <template>
   <main class="session-screen">
+    <button class="local-thread-button" type="button" @click="emit('open-codex-threads')">
+      打开本机 Codex 会话
+    </button>
     <section v-if="groups.length" class="session-groups">
       <section v-for="group in groups" :key="group.name" class="session-group">
         <button
@@ -228,6 +231,16 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 12px;
   min-width: 0;
+}
+
+.local-thread-button {
+  min-height: 40px;
+  border: 1px solid rgba(94, 234, 212, 0.24);
+  border-radius: 8px;
+  background: rgba(20, 184, 166, 0.1);
+  color: #ccfbf1;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .session-group {

@@ -93,6 +93,15 @@ export class JsonExecRunner extends BaseRunner {
     }
     this.abortControllers.delete(session.id);
   }
+
+  getMeta(session = {}) {
+    return {
+      ...super.getMeta(session),
+      model: session.model || this.config.codexModel || "",
+      profile: this.config.codexProfile || "",
+      transport: "json_exec"
+    };
+  }
 }
 
 export const testInternals = {

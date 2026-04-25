@@ -8,6 +8,82 @@ export async function handleSessionRoute(ctx, runtime) {
     return true;
   }
 
+  if (ctx.path === "/api/projects" && ctx.method === "GET") {
+    if (!runtime.requireAuthorized(ctx)) {
+      return true;
+    }
+
+    runtime.json(ctx, 200, { projects: runtime.sessionManager.listProjects() });
+    return true;
+  }
+
+  if (ctx.path === "/api/codex-threads" && ctx.method === "GET") {
+    if (!runtime.requireAuthorized(ctx)) {
+      return true;
+    }
+
+    const url = new URL(ctx.url, "http://localhost");
+    runtime.json(ctx, 200, {
+      threads: runtime.sessionManager.listCodexThreads({
+        limit: Number(url.searchParams.get("limit") || 50)
+      })
+    });
+    return true;
+  }
+
+  if (ctx.path.startsWith("/api/sessions/") && ctx.path.endsWith("/raw-events") && ctx.method === "GET") {
+    if (!runtime.requireAuthorized(ctx)) {
+      return true;
+    }
+    const parts = ctx.path.split("/");
+    const id = decodeURIComponent(parts[3] || "");
+    const url = new URL(ctx.url, "http://localhost");
+    try {
+      runtime.json(ctx, 200, {
+        events: runtime.sessionManager.getRawEvents(id, {
+          limit: Number(url.searchParams.get("limit") || 50)
+        })
+      });
+    } catch (err) {
+      runtime.json(ctx, 404, { error: err?.message || String(err) });
+    }
+    return true;
+  }
+
+  if (ctx.path.startsWith("/api/sessions/") && ctx.path.endsWith("/ping") && ctx.method === "POST") {
+    if (runtime.forbidCrossOrigin(ctx)) {
+      return true;
+    }
+    if (!runtime.requireAuthorized(ctx)) {
+      return true;
+    }
+    const parts = ctx.path.split("/");
+    const id = decodeURIComponent(parts[3] || "");
+    try {
+      runtime.json(ctx, 200, { meta: await runtime.sessionManager.pingRunner(id) });
+    } catch (err) {
+      runtime.json(ctx, 400, { error: err?.message || String(err) });
+    }
+    return true;
+  }
+
+  if (ctx.path.startsWith("/api/sessions/") && ctx.path.endsWith("/restart") && ctx.method === "POST") {
+    if (runtime.forbidCrossOrigin(ctx)) {
+      return true;
+    }
+    if (!runtime.requireAuthorized(ctx)) {
+      return true;
+    }
+    const parts = ctx.path.split("/");
+    const id = decodeURIComponent(parts[3] || "");
+    try {
+      runtime.json(ctx, 200, { session: await runtime.sessionManager.restartRunner(id) });
+    } catch (err) {
+      runtime.json(ctx, 400, { error: err?.message || String(err) });
+    }
+    return true;
+  }
+
   if (ctx.path.startsWith("/api/sessions/") && ctx.method === "GET" && !ctx.path.endsWith("/resize")) {
     if (runtime.forbidCrossOrigin(ctx)) {
       return true;
@@ -60,6 +136,9 @@ export async function handleSessionRoute(ctx, runtime) {
 
     try {
       const body = runtime.parseJson(await runtime.readBody(ctx.req));
+      if (body.resumeThreadId && !body.resumeSessionId) {
+        body.resumeSessionId = body.resumeThreadId;
+      }
       const providerId = String(body.provider || "codex").trim().toLowerCase() || "codex";
       const resumeSessionId = String(body.resumeSessionId || "").trim();
       if (resumeSessionId) {

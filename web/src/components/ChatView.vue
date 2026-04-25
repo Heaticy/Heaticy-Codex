@@ -80,6 +80,20 @@ const PROCESS_PATTERNS = [
   /\bworkdir\b/i
 ];
 
+const EVENT_LABELS = {
+  reasoning: "Reasoning",
+  command_exec: "Command",
+  command_output: "Output",
+  file_change: "File Change",
+  mcp_tool_call: "MCP Tool",
+  plan_update: "Plan",
+  error: "Error"
+};
+
+function isEventPartType(value) {
+  return Object.prototype.hasOwnProperty.call(EVENT_LABELS, String(value || ""));
+}
+
 function isProcessLine(line) {
   const compact = String(line || "").trim();
   if (!compact) {
@@ -183,15 +197,18 @@ function preprocessDisplayMarkdown(value) {
 
 const renderedMessages = computed(() =>
   props.messages.map((message) => {
-    const parts = splitMessageParts(message);
     const partType = String(message?.partType || "").trim();
     const payload = message?.payload || {};
+    const parts = isEventPartType(partType)
+      ? { primary: "", process: String(payload.text || message.text || "").trim() }
+      : splitMessageParts(message);
     const imageUrl = String(payload?.url || "").trim();
     const imageAlt = String(payload?.alt || "").trim() || "image";
-    const renderKind = partType === "image" && imageUrl ? "image" : "markdown";
+    const renderKind = partType === "image" && imageUrl ? "image" : isEventPartType(partType) ? "event" : "markdown";
     return {
       ...message,
       renderKind,
+      eventLabel: EVENT_LABELS[partType] || "Event",
       imageUrl,
       imageAlt,
       displayText: parts.primary || "",
@@ -290,6 +307,12 @@ function handlePrimaryAction() {
     return;
   }
   emit("submit");
+}
+
+function copyText(text) {
+  if (typeof navigator !== "undefined" && navigator.clipboard) {
+    navigator.clipboard.writeText(String(text || ""));
+  }
 }
 
 function handleStreamScroll(event) {
@@ -408,6 +431,14 @@ onBeforeUnmount(() => {
           <div v-else-if="message.displayText || message.role === 'user'" class="message-bubble">
             <div class="message-text markdown-body" v-html="message.renderedHtml"></div>
           </div>
+
+          <details v-else-if="message.renderKind === 'event'" class="event-card" :open="message.partType === 'reasoning' && !isTouchDevice">
+            <summary>
+              <span>{{ message.eventLabel }}</span>
+              <button type="button" @click.prevent="copyText(message.processText)">复制</button>
+            </summary>
+            <pre class="event-card-text">{{ message.processText }}</pre>
+          </details>
 
           <details v-if="showProcessDetails && message.hasProcessDetails" class="message-process">
             <summary>{{ message.processSummary }}</summary>
@@ -790,6 +821,54 @@ onBeforeUnmount(() => {
   line-height: 1.55;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.event-card {
+  width: min(760px, 100%);
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.88);
+  color: #334155;
+  overflow: hidden;
+}
+
+.event-card summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 38px;
+  padding: 8px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.event-card summary::-webkit-details-marker {
+  display: none;
+}
+
+.event-card summary button {
+  border: 1px solid rgba(148, 163, 184, 0.34);
+  border-radius: 6px;
+  background: #fff;
+  color: #334155;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+
+.event-card-text {
+  max-height: 260px;
+  overflow: auto;
+  margin: 0;
+  padding: 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.2);
+  background: #0f172a;
+  color: #e2e8f0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-mono);
+  font-size: 12px;
 }
 
 .empty-state {

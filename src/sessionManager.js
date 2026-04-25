@@ -265,6 +265,57 @@ function isAgentMessageType(value) {
   return normalizeSymbolToken(value) === "agentmessage";
 }
 
+function eventKindForItem(item, phase = "") {
+  const type = String(item?.type || "").trim();
+  if (isAgentMessageType(type)) {
+    return "agent_message";
+  }
+  if (type === "reasoning") {
+    return "reasoning";
+  }
+  if (type === "command_execution") {
+    return String(phase || "").includes("updated") || item?.aggregated_output ? "command_output" : "command_exec";
+  }
+  if (type === "file_change") {
+    return "file_change";
+  }
+  if (type === "mcp_tool_call") {
+    return "mcp_tool_call";
+  }
+  if (type === "todo_list") {
+    return "plan_update";
+  }
+  if (type === "error") {
+    return "error";
+  }
+  return "";
+}
+
+function eventTextForItem(item, kind) {
+  if (kind === "reasoning" || kind === "agent_message") {
+    return String(item?.text || "").trim();
+  }
+  if (kind === "command_exec") {
+    return String(item?.command || "").trim();
+  }
+  if (kind === "command_output") {
+    return String(item?.aggregated_output || item?.command || "").trim();
+  }
+  if (kind === "file_change") {
+    return (item?.changes || []).map((change) => `${change.kind || "update"} ${change.path || ""}`.trim()).join("\n");
+  }
+  if (kind === "mcp_tool_call") {
+    return `${item?.server || "mcp"}:${item?.tool || "tool"} ${JSON.stringify(item?.arguments || {})}`;
+  }
+  if (kind === "plan_update") {
+    return (item?.items || []).map((todo) => `${todo.completed ? "[x]" : "[ ]"} ${todo.text || ""}`).join("\n");
+  }
+  if (kind === "error") {
+    return String(item?.message || item?.error?.message || "").trim();
+  }
+  return "";
+}
+
 function extractTurnItems(result) {
   const direct = Array.isArray(result?.turn?.items) ? result.turn.items : null;
   if (direct) {
@@ -1582,6 +1633,31 @@ export class SessionManager {
     this.messageBus.broadcast(session, payload);
   }
 
+  broadcastItemEvent(session, item, { phase = "final", rawType = "" } = {}) {
+    const kind = eventKindForItem(item, rawType || phase);
+    if (!kind || kind === "agent_message") {
+      return false;
+    }
+    const text = eventTextForItem(item, kind);
+    if (!text) {
+      return false;
+    }
+    this.broadcast(session, {
+      type: "message_part",
+      role: kind === "error" ? "system" : "assistant",
+      kind,
+      part: {
+        type: "event",
+        kind,
+        text,
+        item
+      },
+      phase,
+      timestamp: nowIso()
+    });
+    return true;
+  }
+
   attachClient(id, ws) {
     const session = this.get(id);
     if (!session) {
@@ -1777,8 +1853,18 @@ export class SessionManager {
         session: this.serialize(session)
       });
     }
+    if (event.type === "item.started" || event.type === "item.updated") {
+      const item = event.item || {};
+      return this.broadcastItemEvent(session, item, {
+        phase: event.type === "item.started" ? "started" : "streaming",
+        rawType: event.type
+      });
+    }
     if (event.type === "item.completed") {
       const item = event.item || {};
+      if (!isAgentMessageType(item?.type)) {
+        return this.broadcastItemEvent(session, item, { phase: "final", rawType: event.type });
+      }
       if (String(item.type || "").trim() !== "agent_message") {
         return false;
       }
@@ -1854,6 +1940,21 @@ export class SessionManager {
           });
           continue;
         }
+        if (this.broadcastItemEvent(session, item, { phase: "final", rawType: method })) {
+          continue;
+        }
+        continue;
+      }
+      if (method === "item/updated" || normalizedMethod === "itemupdated") {
+        if (this.broadcastItemEvent(session, item, { phase: "streaming", rawType: method })) {
+          continue;
+        }
+        continue;
+      }
+      if (method === "item/started" || normalizedMethod === "itemstarted") {
+        if (this.broadcastItemEvent(session, item, { phase: "started", rawType: method })) {
+          continue;
+        }
         continue;
       }
       if (method === "turn/completed" || normalizedMethod === "turncompleted") {
@@ -1869,9 +1970,7 @@ export class SessionManager {
         method === "thread/status/changed" ||
         normalizedMethod === "threadstatuschanged" ||
         method === "turn/started" ||
-        normalizedMethod === "turnstarted" ||
-        method === "item/started" ||
-        normalizedMethod === "itemstarted"
+        normalizedMethod === "turnstarted"
       ) {
         this.broadcast(session, { type: "session_updated", session: this.serialize(session) });
         continue;

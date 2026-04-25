@@ -32,6 +32,15 @@ const pendingHydrations = new Map();
 const TOKEN_STORAGE_KEY = "heaticy-codex.saved-token";
 const CLIENT_HEARTBEAT_MS = 25_000;
 const SOCKET_RECONNECT_DELAY_MS = 700;
+const EVENT_PART_TYPES = new Set([
+  "reasoning",
+  "command_exec",
+  "command_output",
+  "file_change",
+  "mcp_tool_call",
+  "plan_update",
+  "error"
+]);
 let autoLoginTried = false;
 let replaySuppressionLines = new Set();
 let submitFallbackTimer = null;
@@ -616,6 +625,23 @@ function appendNormalizedParts(parts = []) {
         continue;
       }
       setStatus(errorText);
+      touched = true;
+    }
+
+    if (EVENT_PART_TYPES.has(partType)) {
+      const text = String(payload.text || "").trim();
+      if (!text) {
+        continue;
+      }
+      finalizeAssistantStream();
+      messages.push(
+        createMessage(role || "assistant", text, ts, {
+          source: part?.source || "message_part",
+          partType,
+          payload,
+          rawType: part?.rawType || ""
+        })
+      );
       touched = true;
     }
   }

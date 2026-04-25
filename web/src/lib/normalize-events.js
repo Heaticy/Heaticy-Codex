@@ -12,7 +12,7 @@ function safeObject(value) {
 
 function visibleChatRole(value) {
   const role = asText(value).toLowerCase();
-  if (role === "user" || role === "assistant") {
+  if (role === "user" || role === "assistant" || role === "system") {
     return role;
   }
   return "";
@@ -96,6 +96,25 @@ export function normalizeMessagePartEvent(payload, sessionId = "") {
         phase: asText(payload?.phase) || "streaming",
         source: "message_part",
         rawType: "message_part"
+      })
+    ];
+  }
+
+  if (partType === "event" && asText(part.kind)) {
+    return [
+      createUiPart({
+        sessionId,
+        role: role || "assistant",
+        partType: asText(part.kind),
+        payload: {
+          kind: asText(part.kind),
+          text: String(part.text || ""),
+          item: safeObject(part.item)
+        },
+        ts,
+        phase: asText(payload?.phase) || "final",
+        source: "message_part",
+        rawType: asText(payload?.kind) || "message_part"
       })
     ];
   }

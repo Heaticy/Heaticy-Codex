@@ -218,9 +218,9 @@ onBeforeUnmount(() => {
 .session-screen {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   min-width: 0;
-  padding: 12px 12px 18px;
+  padding: 14px 12px calc(22px + env(safe-area-inset-bottom));
 }
 
 .session-groups {
@@ -233,10 +233,13 @@ onBeforeUnmount(() => {
 .session-group {
   position: relative;
   overflow: visible;
-  border: 1px solid rgba(201, 189, 177, 0.55);
-  border-radius: 20px;
-  background: linear-gradient(180deg, rgba(255, 251, 247, 0.98), rgba(247, 242, 237, 0.94));
-  box-shadow: 0 12px 30px rgba(120, 101, 84, 0.05);
+  border: 1px solid rgba(88, 166, 255, 0.18);
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(12, 30, 60, 0.86), rgba(6, 16, 35, 0.78)),
+    radial-gradient(circle at top left, rgba(56, 189, 248, 0.16), transparent 42%);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(18px);
 }
 
 .group-action-popover {
@@ -245,10 +248,10 @@ onBeforeUnmount(() => {
   top: 8px;
   transform: translateY(-100%);
   z-index: 5;
-  border: 1px solid rgba(206, 193, 179, 0.78);
+  border: 1px solid rgba(88, 166, 255, 0.3);
   border-radius: 12px;
-  background: rgba(255, 252, 248, 0.98);
-  box-shadow: 0 14px 26px rgba(84, 72, 58, 0.16);
+  background: rgba(8, 20, 42, 0.98);
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.34);
   padding: 6px;
 }
 
@@ -262,7 +265,7 @@ onBeforeUnmount(() => {
   border: 0;
   border-radius: 9px;
   background: transparent;
-  color: rgba(70, 58, 47, 0.95);
+  color: #d9ecff;
   font-size: 13px;
   line-height: 1.2;
   font-weight: 600;
@@ -272,7 +275,7 @@ onBeforeUnmount(() => {
 }
 
 .group-action-btn:active {
-  background: rgba(171, 149, 126, 0.16);
+  background: rgba(56, 189, 248, 0.14);
 }
 
 .session-group-head {
@@ -295,12 +298,12 @@ onBeforeUnmount(() => {
 }
 
 .session-group-head:active {
-  background: rgba(161, 145, 129, 0.06);
+  background: rgba(56, 189, 248, 0.08);
   transform: translateY(1px);
 }
 
 .session-group-head:focus-visible {
-  outline: 2px solid rgba(182, 160, 139, 0.34);
+  outline: 2px solid rgba(56, 189, 248, 0.38);
   outline-offset: -2px;
 }
 
@@ -318,10 +321,10 @@ onBeforeUnmount(() => {
   width: 30px;
   height: 30px;
   margin-top: 1px;
-  border: 1px solid rgba(205, 193, 181, 0.66);
+  border: 1px solid rgba(56, 189, 248, 0.3);
   border-radius: 10px;
-  background: linear-gradient(180deg, rgba(240, 232, 224, 0.98), rgba(248, 242, 236, 0.9));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  background: linear-gradient(180deg, rgba(14, 165, 233, 0.18), rgba(15, 23, 42, 0.68));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 0 18px rgba(56, 189, 248, 0.1);
 }
 
 .folder-icon::before {
@@ -332,7 +335,7 @@ onBeforeUnmount(() => {
   width: 12px;
   height: 5px;
   border-radius: 4px 4px 0 0;
-  background: rgba(146, 126, 108, 0.16);
+  background: rgba(94, 234, 212, 0.32);
 }
 
 .folder-icon::after {
@@ -340,7 +343,7 @@ onBeforeUnmount(() => {
   position: absolute;
   inset: 9px 4px 4px;
   border-radius: 5px;
-  background: rgba(146, 126, 108, 0.1);
+  background: rgba(56, 189, 248, 0.14);
 }
 
 .session-group-copy {
@@ -359,7 +362,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  color: rgba(58, 50, 42, 0.94);
+  color: #eaf4ff;
   font-size: 15px;
   font-weight: 650;
   line-height: 1.25;
@@ -370,10 +373,10 @@ onBeforeUnmount(() => {
 .session-group-count {
   flex: 0 0 auto;
   padding: 4px 8px;
-  border: 1px solid rgba(208, 197, 187, 0.6);
+  border: 1px solid rgba(56, 189, 248, 0.26);
   border-radius: 999px;
-  background: rgba(245, 239, 233, 0.92);
-  color: rgba(127, 112, 98, 0.92);
+  background: rgba(56, 189, 248, 0.1);
+  color: #93c5fd;
   font-size: 11px;
   font-weight: 600;
   line-height: 1;
@@ -381,7 +384,7 @@ onBeforeUnmount(() => {
 
 .session-group-subtitle {
   margin: 5px 0 0;
-  color: rgba(140, 124, 110, 0.95);
+  color: #8aa7c6;
   font-size: 12px;
   line-height: 1.35;
 }
@@ -389,7 +392,7 @@ onBeforeUnmount(() => {
 .session-group-toggle {
   flex: 0 0 auto;
   align-self: center;
-  color: rgba(143, 127, 113, 0.82);
+  color: rgba(147, 197, 253, 0.82);
   font-size: 15px;
   line-height: 1;
   transition: transform 0.2s ease, color 0.16s ease;
@@ -397,7 +400,7 @@ onBeforeUnmount(() => {
 
 .session-group-toggle.expanded {
   transform: rotate(180deg);
-  color: rgba(155, 133, 112, 0.92);
+  color: rgba(94, 234, 212, 0.94);
 }
 
 .session-group-body {
@@ -417,8 +420,8 @@ onBeforeUnmount(() => {
   width: 1px;
   background: linear-gradient(
     180deg,
-    rgba(201, 189, 177, 0.42),
-    rgba(201, 189, 177, 0.1)
+    rgba(56, 189, 248, 0.3),
+    rgba(56, 189, 248, 0.04)
   );
 }
 
@@ -429,12 +432,12 @@ onBeforeUnmount(() => {
   gap: 12px;
   width: 100%;
   padding: 10px 12px 10px 12px;
-  border: 1px solid transparent;
-  border-radius: 14px;
-  background: rgba(255, 252, 249, 0.74);
+  border: 1px solid rgba(88, 166, 255, 0.1);
+  border-radius: 16px;
+  background: rgba(8, 20, 42, 0.58);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.72),
-    0 0 0 rgba(120, 101, 84, 0);
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 0 rgba(56, 189, 248, 0);
   color: inherit;
   text-align: left;
   cursor: pointer;
@@ -448,7 +451,7 @@ onBeforeUnmount(() => {
 }
 
 .session-row:hover {
-  background: rgba(255, 250, 246, 0.94);
+  background: rgba(15, 35, 70, 0.76);
 }
 
 .session-row:active {
@@ -456,21 +459,21 @@ onBeforeUnmount(() => {
 }
 
 .session-row:focus-visible {
-  outline: 2px solid rgba(182, 160, 139, 0.32);
+  outline: 2px solid rgba(56, 189, 248, 0.36);
   outline-offset: 2px;
 }
 
 .session-row.active {
-  border-color: rgba(188, 170, 152, 0.42);
-  background: linear-gradient(180deg, rgba(250, 244, 237, 0.98), rgba(255, 252, 248, 0.92));
+  border-color: rgba(94, 234, 212, 0.36);
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.2), rgba(8, 20, 42, 0.88));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.88),
-    0 8px 20px rgba(146, 126, 108, 0.08);
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 10px 24px rgba(14, 165, 233, 0.12);
 }
 
 .session-row.pending {
-  border-color: rgba(196, 178, 160, 0.4);
-  background: linear-gradient(180deg, rgba(251, 247, 242, 0.95), rgba(255, 252, 248, 0.92));
+  border-color: rgba(56, 189, 248, 0.3);
+  background: rgba(12, 30, 58, 0.68);
 }
 
 .session-row-body {
@@ -485,7 +488,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   margin: 0;
   overflow: hidden;
-  color: rgba(58, 50, 42, 0.94);
+  color: #dceeff;
   font-size: 14px;
   font-weight: 600;
   line-height: 1.3;
@@ -495,22 +498,22 @@ onBeforeUnmount(() => {
 
 .session-row-time {
   flex: 0 0 auto;
-  color: rgba(142, 126, 113, 0.94);
+  color: #82a2c7;
   font-size: 11px;
   line-height: 1.2;
   white-space: nowrap;
 }
 
 .session-row.active .session-row-title {
-  color: rgb(97, 81, 66);
+  color: #f4fbff;
 }
 
 .session-row-delete {
   flex: 0 0 auto;
   border: 0;
   border-radius: 10px;
-  background: rgba(182, 89, 79, 0.1);
-  color: #9f4139;
+  background: rgba(251, 113, 133, 0.12);
+  color: #fda4af;
   font-size: 12px;
   line-height: 1;
   font-weight: 700;
@@ -519,15 +522,15 @@ onBeforeUnmount(() => {
 }
 
 .session-row-delete:active {
-  background: rgba(182, 89, 79, 0.18);
+  background: rgba(251, 113, 133, 0.2);
 }
 
 .empty-state {
   padding: 24px 18px;
-  border: 1px dashed rgba(205, 193, 181, 0.7);
+  border: 1px dashed rgba(88, 166, 255, 0.28);
   border-radius: 18px;
-  background: rgba(250, 246, 242, 0.78);
-  color: rgba(142, 126, 113, 0.92);
+  background: rgba(8, 20, 42, 0.58);
+  color: #89a4c2;
   font-size: 13px;
   text-align: center;
 }

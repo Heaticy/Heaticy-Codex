@@ -166,6 +166,21 @@ const threadMismatch = computed(() => {
   }
   return expectedThreadId.value !== activeThreadId.value;
 });
+const connectionNotice = computed(() => {
+  if (route.name !== "chat" || !state.activeSessionMeta) {
+    return "";
+  }
+  if (state.statusText === "正在连接会话…") {
+    return "正在恢复连接";
+  }
+  if (state.statusText === "会话连接已关闭，请重试一次。" || state.statusText === "会话连接失败，请重试一次。") {
+    return "连接中断，正在静默重连";
+  }
+  if (state.activeSocket?.readyState === WebSocket.OPEN) {
+    return "实时连接已就绪";
+  }
+  return "保持当前会话画面";
+});
 const canSend = computed(() => Boolean(composerDraft.value.trim()));
 const canInterrupt = computed(() => {
   const socketReady =
@@ -1513,7 +1528,7 @@ if (typeof window !== 'undefined') {
         :can-send="canSend"
         :can-interrupt="canInterrupt"
         :loading="state.loading"
-        :status-text="state.statusText"
+        :status-text="connectionNotice || state.statusText"
         @back="backToList"
         @interrupt="interruptActiveSession"
         @create-sibling-session="createSessionFromCurrentWorkspace"

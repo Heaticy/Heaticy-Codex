@@ -24,8 +24,9 @@ const rememberTokenModel = computed({
 <template>
   <section class="login-view">
     <div class="login-card">
-      <p class="login-kicker">Codex</p>
-      <h1>登录</h1>
+      <p class="login-kicker">Heaticy Codex</p>
+      <h1>进入控制台</h1>
+      <p class="login-copy">竖屏优化的 Codex Web 终端，连接本机工作区与远程会话。</p>
       <form @submit.prevent="emit('submit')">
       <label class="field">
         <span>Access Token</span>
@@ -50,3 +51,54 @@ const rememberTokenModel = computed({
     </div>
   </section>
 </template>
+
+<style scoped>
+.login-view {
+  position: relative;
+  overflow: hidden;
+}
+
+.login-view::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(56, 189, 248, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 189, 248, 0.06) 1px, transparent 1px);
+  background-size: 34px 34px;
+  mask-image: radial-gradient(circle at center, black, transparent 72%);
+}
+
+.login-card {
+  position: relative;
+}
+
+.login-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.18), transparent 32%, rgba(94, 234, 212, 0.12));
+  opacity: 0.72;
+}
+
+.login-card > * {
+  position: relative;
+}
+
+.login-card h1 {
+  color: #f2f8ff;
+  font-size: clamp(30px, 8vw, 42px);
+  letter-spacing: -0.04em;
+  line-height: 0.98;
+}
+
+.login-copy {
+  margin: 12px 0 22px;
+  color: #8fb2d3;
+  font-size: 14px;
+  line-height: 1.6;
+}
+</style>

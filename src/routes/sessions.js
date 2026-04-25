@@ -123,6 +123,19 @@ export async function handleSessionRoute(ctx, runtime) {
     return true;
   }
 
+  if (ctx.path === "/api/healthz" && ctx.method === "GET") {
+    runtime.json(ctx, 200, runtime.healthzPayload());
+    return true;
+  }
+
+  if (ctx.path === "/api/metrics" && ctx.method === "GET") {
+    ctx.status = 200;
+    ctx.set(runtime.responseHeaders());
+    ctx.type = "text/plain; version=0.0.4; charset=utf-8";
+    ctx.body = runtime.metricsPayload();
+    return true;
+  }
+
   if (ctx.path.startsWith("/api/sessions/") && ctx.path.endsWith("/resize") && ctx.method === "POST") {
     if (runtime.forbidCrossOrigin(ctx)) {
       return true;

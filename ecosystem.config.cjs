@@ -9,6 +9,8 @@ const shared = {
   instances: 1,
   exec_mode: "fork",
   autorestart: true,
+  cron_restart: "0 4 * * *",
+  max_memory_restart: "1G",
   restart_delay: 1200,
   kill_timeout: 5000,
   listen_timeout: 5000,

@@ -293,6 +293,35 @@ export function createKoaApp({ config, sessionManager }) {
     wsClients: runtime.wss?.clients.size || 0,
     ...runtime.sessionManager.stats()
   });
+  runtime.healthzPayload = () => {
+    const observed = runtime.sessionManager.observability();
+    return {
+      ok: true,
+      bridgeReady: observed.bridgeReady,
+      runnerCount: observed.activeRunners,
+      lastErrorAt: observed.lastErrorAt,
+      shuttingDown: runtime.shuttingDown
+    };
+  };
+  runtime.metricsPayload = () => {
+    const stats = runtime.sessionManager.stats();
+    const observed = runtime.sessionManager.observability();
+    const lines = [
+      "# HELP heaticy_sessions_active Active live sessions.",
+      "# TYPE heaticy_sessions_active gauge",
+      `heaticy_sessions_active ${stats.running}`,
+      "# HELP heaticy_codex_turns_total Codex turns by status.",
+      "# TYPE heaticy_codex_turns_total counter",
+      `heaticy_codex_turns_total{status=\"completed\"} ${observed.turns.completed}`,
+      `heaticy_codex_turns_total{status=\"failed\"} ${observed.turns.failed}`,
+      "# HELP heaticy_approvals_total Approval decisions by decision.",
+      "# TYPE heaticy_approvals_total counter",
+      `heaticy_approvals_total{decision=\"allow\"} ${observed.approvals.allow}`,
+      `heaticy_approvals_total{decision=\"deny\"} ${observed.approvals.deny}`,
+      `heaticy_approvals_total{decision=\"auto_allow\"} ${observed.approvals.auto_allow}`
+    ];
+    return `${lines.join("\n")}\n`;
+  };
   runtime.serveFile = (ctx, filePath, contentType) => {
     ctx.status = 200;
     ctx.set(runtime.responseHeaders());

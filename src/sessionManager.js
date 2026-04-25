@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { ApprovalManager } from "./approvals.js";
+import { AuditLogger } from "./audit.js";
 import { MessageBus } from "./messageBus.js";
 import { AppServerRunner } from "./runners/appServerRunner.js";
 import { JsonExecRunner } from "./runners/jsonExecRunner.js";
@@ -1285,7 +1286,11 @@ export class SessionManager {
     this.sessions = new SessionRegistry();
     this.messageBus = new MessageBus();
     this.approvals = new ApprovalManager(config);
+    this.audit = new AuditLogger(config);
     this.pendingApprovals = new Map();
+    this.turnCounters = { completed: 0, failed: 0 };
+    this.approvalCounters = { allow: 0, deny: 0, auto_allow: 0 };
+    this.lastErrorAt = "";
     this.providers = new Map(buildProviders(config).map((provider) => [provider.id, provider]));
     this.customNamesPath = path.join(this.config.dataDir, "session-names.json");
     this.archivedSessionsPath = path.join(this.config.dataDir, "archived-sessions.json");
@@ -1436,6 +1441,16 @@ export class SessionManager {
       clients: clientCount,
       running,
       exited
+    };
+  }
+
+  observability() {
+    return {
+      bridgeReady: this.appServerBridge ? this.appServerBridge.isTransportReady() && this.appServerBridge.initialized : false,
+      activeRunners: [...this.sessions.values()].filter((session) => session.status !== "exited").length,
+      lastErrorAt: this.lastErrorAt,
+      turns: { ...this.turnCounters },
+      approvals: { ...this.approvalCounters }
     };
   }
 
@@ -1655,6 +1670,14 @@ export class SessionManager {
       phase,
       timestamp: nowIso()
     });
+    if (kind === "command_exec" || kind === "command_output" || kind === "file_change") {
+      this.audit.write({
+        sessionId: session.id,
+        actor: "codex",
+        kind,
+        detail: item
+      });
+    }
     return true;
   }
 
@@ -1726,6 +1749,7 @@ export class SessionManager {
     try {
       const result = await this.appServerRunner.startTurn(session, prompt);
       this.handleAppServerTurnResult(session, result);
+      this.turnCounters.completed += 1;
       session.status = "running";
       session.appServerReconnectAttempts = 0;
       session.turnRunning = false;
@@ -1747,6 +1771,8 @@ export class SessionManager {
         setTimeout(() => this.maybeStartAppServerTurn(session), 1_000).unref();
         return;
       }
+      this.turnCounters.failed += 1;
+      this.lastErrorAt = nowIso();
       this.broadcast(session, {
         type: "message_part",
         role: "system",
@@ -1810,6 +1836,7 @@ export class SessionManager {
         }
       });
       emittedAssistant = emittedAssistant || Boolean(result?.emittedAssistant);
+      this.turnCounters.completed += 1;
       session.runningProcess = null;
       session.updatedAt = nowIso();
       if (!emittedAssistant) {
@@ -1822,6 +1849,8 @@ export class SessionManager {
         });
       }
     } catch (error) {
+      this.turnCounters.failed += 1;
+      this.lastErrorAt = nowIso();
       session.runningProcess = null;
       session.updatedAt = nowIso();
       const concise = String(error?.message || error || "")
@@ -2013,6 +2042,13 @@ export class SessionManager {
     };
     const approval = { detail, params, kind: request.kind };
     if (this.approvals.canAutoApprove(approval) || this.approvals.isRemembered(approval)) {
+      this.approvalCounters.auto_allow += 1;
+      this.audit.write({
+        sessionId: session?.id || "",
+        actor: "system",
+        kind: "approval",
+        detail: { decision: "auto_allow", request: detail }
+      });
       request.resolve(this.approvalAcceptPayload(request.kind));
       return;
     }
@@ -2065,6 +2101,13 @@ export class SessionManager {
         scope: "global"
       });
     }
+    this.approvalCounters[accepted ? "allow" : "deny"] += 1;
+    this.audit.write({
+      sessionId,
+      actor: "user",
+      kind: "approval",
+      detail: { decision: accepted ? "allow" : "deny", remember: Boolean(remember), request: pending.detail }
+    });
     pending.resolve(accepted ? this.approvalAcceptPayload(pending.kind) : pending.fallback);
     return true;
   }

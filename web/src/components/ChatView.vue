@@ -3,6 +3,8 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import MarkdownIt from "markdown-it";
 import DOMPurify from "dompurify";
 
+import ApprovalToast from "./ApprovalToast.vue";
+
 const BOTTOM_THRESHOLD = 84;
 const MAX_COMPOSER_HEIGHT = 160;
 
@@ -20,10 +22,11 @@ const props = defineProps({
   canSend: Boolean,
   canInterrupt: Boolean,
   loading: Boolean,
-  statusText: { type: String, default: "" }
+  statusText: { type: String, default: "" },
+  approvalRequests: { type: Array, default: () => [] }
 });
 
-const emit = defineEmits(["back", "update:draft", "submit", "interrupt", "create-sibling-session", "delete-session"]);
+const emit = defineEmits(["back", "update:draft", "submit", "interrupt", "create-sibling-session", "delete-session", "approval-decision"]);
 const messageListEl = ref(null);
 const composerEl = ref(null);
 const viewportHeight = ref(0);
@@ -424,6 +427,8 @@ onBeforeUnmount(() => {
       </button>
 
       <p v-if="statusText" class="chat-status">{{ statusText }}</p>
+
+      <ApprovalToast :requests="approvalRequests" @decide="emit('approval-decision', $event)" />
 
       <form class="composer" @submit.prevent="emit('submit')">
         <textarea

@@ -69,6 +69,7 @@ const state = reactive({
   activeMessages: [],
   activeSocket: null,
   activeStreamBuffer: "",
+  approvalRequests: [],
   pendingSessionId: "",
   activeSessionOpenToken: 0,
   replayGuardActive: false,
@@ -823,6 +824,7 @@ function attachLiveSocket(sessionId, historyMessages = []) {
   finalizeAssistantStream();
   state.activeLiveSessionId = sessionId;
   state.activeStreamBuffer = "";
+  state.approvalRequests = [];
   const socket = new WebSocket(resolveWsUrl(sessionId));
   state.activeSocket = socket;
 
@@ -877,6 +879,15 @@ function attachLiveSocket(sessionId, historyMessages = []) {
         next[index] = updated;
         state.sessions = next;
       }
+      return;
+    }
+
+    if (payload.type === "approval_request" && payload.request) {
+      state.approvalRequests = [
+        ...state.approvalRequests.filter((request) => request.id !== payload.request.id),
+        payload.request
+      ];
+      setStatus("有操作等待确认。");
       return;
     }
 
@@ -1293,6 +1304,16 @@ async function submitInput() {
   }
 }
 
+function handleApprovalDecision(payload) {
+  if (!state.activeSocket || state.activeSocket.readyState !== WebSocket.OPEN) {
+    setStatus("会话连接已断开，无法发送审批结果。");
+    return;
+  }
+  state.activeSocket.send(JSON.stringify({ type: "approval_response", ...payload }));
+  state.approvalRequests = state.approvalRequests.filter((request) => request.id !== payload.id);
+  setStatus(payload.decision === "deny" ? "已拒绝操作。" : "已允许操作。");
+}
+
 function interruptActiveSession() {
   clearSubmitFallbackTimer();
   if (!state.activeSocket || state.activeSocket.readyState !== WebSocket.OPEN) {
@@ -1529,10 +1550,12 @@ if (typeof window !== 'undefined') {
         :can-interrupt="canInterrupt"
         :loading="state.loading"
         :status-text="connectionNotice || state.statusText"
+        :approval-requests="state.approvalRequests"
         @back="backToList"
         @interrupt="interruptActiveSession"
         @create-sibling-session="createSessionFromCurrentWorkspace"
         @delete-session="deleteSessionItem(state.activeSessionMeta)"
+        @approval-decision="handleApprovalDecision"
         @submit="submitInput"
       />
 

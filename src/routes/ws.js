@@ -54,6 +54,8 @@ export function installWebSocketServer(server, runtime) {
         }
         if (payload.type === "input") {
           runtime.sessionManager.write(sessionId, payload.data || "");
+        } else if (payload.type === "approval_response") {
+          runtime.sessionManager.resolveApproval(sessionId, payload);
         } else if (payload.type === "resize") {
           runtime.sessionManager.resize(sessionId, payload.cols, payload.rows);
         }

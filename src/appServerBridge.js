@@ -188,7 +188,9 @@ export class AppServerBridge extends EventEmitter {
       return;
     }
     if (Object.prototype.hasOwnProperty.call(msg, "id") && msg.method) {
-      this.handleServerRequest(msg);
+      this.handleServerRequest(msg).catch((error) => {
+        this.sendError(msg.id, -32000, error?.message || String(error));
+      });
       return;
     }
     if (msg.method) {
@@ -238,26 +240,20 @@ export class AppServerBridge extends EventEmitter {
     }
   }
 
-  handleServerRequest(msg) {
+  async handleServerRequest(msg) {
     const id = msg.id;
     const method = String(msg.method || "");
     try {
       if (method === "item/commandExecution/requestApproval") {
-        this.sendResponse(id, { decision: "acceptForSession" });
+        this.sendResponse(id, await this.requestFrontendApproval("command", msg));
         return;
       }
       if (method === "item/fileChange/requestApproval") {
-        this.sendResponse(id, { decision: "acceptForSession" });
+        this.sendResponse(id, await this.requestFrontendApproval("file_change", msg));
         return;
       }
       if (method === "item/permissions/requestApproval") {
-        this.sendResponse(id, {
-          permissions: {
-            fileSystem: {},
-            network: { enabled: true }
-          },
-          scope: "session"
-        });
+        this.sendResponse(id, await this.requestFrontendApproval("permissions", msg));
         return;
       }
       if (method === "item/tool/requestUserInput") {
@@ -272,6 +268,22 @@ export class AppServerBridge extends EventEmitter {
     } catch (error) {
       this.sendError(id, -32000, error?.message || String(error));
     }
+  }
+
+  requestFrontendApproval(kind, msg) {
+    return new Promise((resolve) => {
+      const fallback = kind === "permissions" ? { permissions: {}, scope: "session" } : { decision: "deny" };
+      const handled = this.emit("approval_request", {
+        kind,
+        method: msg.method,
+        params: msg.params || {},
+        resolve,
+        fallback
+      });
+      if (!handled) {
+        resolve(fallback);
+      }
+    });
   }
 
   request(method, params) {

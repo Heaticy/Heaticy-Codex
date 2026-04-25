@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
+import { ApprovalManager } from "./approvals.js";
 import { MessageBus } from "./messageBus.js";
 import { AppServerRunner } from "./runners/appServerRunner.js";
 import { JsonExecRunner } from "./runners/jsonExecRunner.js";
@@ -1232,6 +1233,8 @@ export class SessionManager {
     this.ptyRunner = new PtyRunner(config);
     this.sessions = new SessionRegistry();
     this.messageBus = new MessageBus();
+    this.approvals = new ApprovalManager(config);
+    this.pendingApprovals = new Map();
     this.providers = new Map(buildProviders(config).map((provider) => [provider.id, provider]));
     this.customNamesPath = path.join(this.config.dataDir, "session-names.json");
     this.archivedSessionsPath = path.join(this.config.dataDir, "archived-sessions.json");
@@ -1257,6 +1260,7 @@ export class SessionManager {
         }
       });
       this.appServerBridge.on("error", (error) => this.handleAppServerBridgeError(error));
+      this.appServerBridge.on("approval_request", (request) => this.handleApprovalRequest(request));
     }
   }
 
@@ -1892,6 +1896,78 @@ export class SessionManager {
       session.updatedAt = nowIso();
       this.broadcast(session, { type: "session_updated", session: this.serialize(session) });
     }
+  }
+
+  handleApprovalRequest(request) {
+    const params = request.params || {};
+    const threadId = String(params.threadId || params.thread_id || params.thread?.id || "").trim();
+    const session = [...this.sessions.values()].find(
+      (candidate) => candidate.provider === "codex" && String(candidate.resumeSessionId || "").trim() === threadId
+    );
+    const detail = {
+      kind: request.kind,
+      method: request.method,
+      threadId,
+      command: String(params.command || params.commandLine || params.item?.command || "").trim(),
+      path: String(params.path || params.filePath || params.item?.path || "").trim(),
+      params
+    };
+    const approval = { detail, params, kind: request.kind };
+    if (this.approvals.canAutoApprove(approval) || this.approvals.isRemembered(approval)) {
+      request.resolve(this.approvalAcceptPayload(request.kind));
+      return;
+    }
+    if (!session) {
+      request.resolve(request.fallback);
+      return;
+    }
+
+    const id = crypto.randomUUID();
+    const timer = setTimeout(() => {
+      this.pendingApprovals.delete(id);
+      request.resolve(request.fallback);
+    }, 10 * 60 * 1000);
+    timer.unref();
+    this.pendingApprovals.set(id, { ...request, sessionId: session.id, detail, timer });
+    this.broadcast(session, {
+      type: "approval_request",
+      request: {
+        id,
+        ...detail,
+        highRisk: this.approvals.isHighRisk(approval)
+      },
+      timestamp: nowIso()
+    });
+  }
+
+  approvalAcceptPayload(kind) {
+    if (kind === "permissions") {
+      return {
+        permissions: {
+          fileSystem: {},
+          network: { enabled: true }
+        },
+        scope: "session"
+      };
+    }
+    return { decision: "acceptForSession" };
+  }
+
+  resolveApproval(sessionId, { id, decision, remember = false } = {}) {
+    const pending = this.pendingApprovals.get(id);
+    if (!pending || pending.sessionId !== sessionId) {
+      return false;
+    }
+    clearTimeout(pending.timer);
+    this.pendingApprovals.delete(id);
+    const accepted = decision === "allow" || decision === "always_allow";
+    if (accepted && remember && !this.approvals.isHighRisk(pending)) {
+      this.approvals.rememberCommand(pending.detail.command || JSON.stringify(pending.detail.params || {}), {
+        scope: "global"
+      });
+    }
+    pending.resolve(accepted ? this.approvalAcceptPayload(pending.kind) : pending.fallback);
+    return true;
   }
 
   write(id, data) {

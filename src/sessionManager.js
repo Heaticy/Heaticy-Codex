@@ -2,9 +2,11 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-import pty from "node-pty";
-
+import { MessageBus } from "./messageBus.js";
+import { AppServerRunner } from "./runners/appServerRunner.js";
 import { JsonExecRunner } from "./runners/jsonExecRunner.js";
+import { PtyRunner } from "./runners/ptyRunner.js";
+import { SessionRegistry } from "./sessionRegistry.js";
 
 const shortTimeFormatterCache = new Map();
 
@@ -1225,8 +1227,11 @@ export class SessionManager {
   constructor(config, { appServerBridge = null } = {}) {
     this.config = config;
     this.appServerBridge = appServerBridge;
+    this.appServerRunner = new AppServerRunner(config, { bridge: appServerBridge });
     this.jsonExecRunner = new JsonExecRunner(config);
-    this.sessions = new Map();
+    this.ptyRunner = new PtyRunner(config);
+    this.sessions = new SessionRegistry();
+    this.messageBus = new MessageBus();
     this.providers = new Map(buildProviders(config).map((provider) => [provider.id, provider]));
     this.customNamesPath = path.join(this.config.dataDir, "session-names.json");
     this.archivedSessionsPath = path.join(this.config.dataDir, "archived-sessions.json");
@@ -1451,15 +1456,10 @@ export class SessionManager {
       return this.serialize(session);
     }
 
-    const shell = pty.spawn(spawnSpec.file, spawnSpec.args, {
-      name: "xterm-color",
-      cols: 120,
-      rows: 30,
-      cwd: resolvedCwd,
-      env: {
-        ...process.env,
-        TERM: "xterm-256color"
-      }
+    const shell = this.ptyRunner.spawn({
+      file: spawnSpec.file,
+      args: spawnSpec.args,
+      cwd: resolvedCwd
     });
 
     const session = {
@@ -1575,13 +1575,7 @@ export class SessionManager {
   }
 
   broadcast(session, payload) {
-    for (const client of session.clients) {
-      try {
-        client.send(JSON.stringify(payload));
-      } catch {
-        // Ignore transient ws send failures.
-      }
-    }
+    this.messageBus.broadcast(session, payload);
   }
 
   attachClient(id, ws) {
@@ -1650,7 +1644,7 @@ export class SessionManager {
     session.turnNoReplyNotified = false;
     session.updatedAt = nowIso();
     try {
-      const result = await this.appServerBridge.startTurn(session, prompt);
+      const result = await this.appServerRunner.startTurn(session, prompt);
       this.handleAppServerTurnResult(session, result);
       session.status = "running";
       session.appServerReconnectAttempts = 0;
@@ -1967,7 +1961,7 @@ export class SessionManager {
           this.jsonExecRunner.stop(session);
         }
       } else {
-        session.shell.kill();
+        this.ptyRunner.stop(session);
       }
     } catch {
       // Ignore kill failures.
@@ -2006,7 +2000,7 @@ export class SessionManager {
             this.jsonExecRunner.stop(session);
           }
         } else {
-          session.shell.kill();
+          this.ptyRunner.stop(session);
         }
       } catch {
         // Ignore kill failures during shutdown.

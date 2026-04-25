@@ -1,6 +1,6 @@
-import { EventEmitter } from "node:events";
-
 import { Codex } from "@openai/codex-sdk";
+
+import { BaseRunner } from "./baseRunner.js";
 
 function compactObject(value) {
   return Object.fromEntries(Object.entries(value).filter((entry) => entry[1] !== undefined && entry[1] !== ""));
@@ -29,10 +29,9 @@ function buildThreadOptions(config, session) {
  * const runner = new JsonExecRunner(config);
  * await runner.runTurn(session, "summarize this repo", (event) => console.log(event.type));
  */
-export class JsonExecRunner extends EventEmitter {
+export class JsonExecRunner extends BaseRunner {
   constructor(config, { CodexImpl = Codex } = {}) {
-    super();
-    this.config = config;
+    super(config);
     this.CodexImpl = CodexImpl;
     this.codex = new CodexImpl({
       codexPathOverride: config.codexBin,

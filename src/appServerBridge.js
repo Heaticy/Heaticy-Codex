@@ -11,6 +11,7 @@ export class AppServerBridge extends EventEmitter {
   constructor(config) {
     super();
     this.config = config;
+    this.transport = String(config.codexAppServerTransport || "stdio").trim().toLowerCase() === "ws" ? "ws" : "stdio";
     this.listenUrl = config.codexAppServerListenUrl;
     this.proc = null;
     this.ws = null;
@@ -20,13 +21,21 @@ export class AppServerBridge extends EventEmitter {
     this.pending = new Map();
     this.connecting = null;
     this.shuttingDown = false;
+    this.stdoutBuffer = "";
+    this.stderrBuffer = "";
+
+    if (this.transport === "ws") {
+      console.warn(
+        "[app-server] CODEX_APP_SERVER_TRANSPORT=ws is deprecated and will be removed in a future release; use stdio instead."
+      );
+    }
   }
 
   async ensureReady() {
     if (!this.config.codexAppServerEnabled) {
       throw new Error("codex app-server is disabled");
     }
-    if (this.connected && this.initialized && this.ws?.readyState === WebSocket.OPEN) {
+    if (this.isTransportReady() && this.initialized) {
       return;
     }
     if (this.connecting) {
@@ -42,7 +51,9 @@ export class AppServerBridge extends EventEmitter {
 
   async connectInternal() {
     await this.startProcess();
-    await this.openWebSocket();
+    if (this.transport === "ws") {
+      await this.openWebSocket();
+    }
     await this.request("initialize", {
       clientInfo: {
         name: "heaticy-codex",
@@ -57,26 +68,55 @@ export class AppServerBridge extends EventEmitter {
   }
 
   async startProcess() {
-    if (this.proc && !this.proc.killed) {
+    if (this.proc && !this.proc.killed && this.proc.exitCode === null) {
       return;
     }
-    const args = ["app-server", "--listen", this.listenUrl];
+    const args = this.transport === "ws" ? ["app-server", "--listen", this.listenUrl] : ["app-server"];
+    this.stdoutBuffer = "";
+    this.stderrBuffer = "";
     this.proc = spawn(this.config.codexBin, args, {
       cwd: this.config.root,
       env: process.env,
-      stdio: ["ignore", "ignore", "pipe"]
+      stdio: this.transport === "ws" ? ["ignore", "pipe", "pipe"] : ["pipe", "pipe", "pipe"]
     });
-    this.proc.stderr?.on("data", (chunk) => {
+    this.proc.stdout?.on("data", (chunk) => {
+      if (this.transport === "stdio") {
+        this.handleStdoutData(chunk);
+        return;
+      }
       const line = String(chunk || "").trim();
       if (line) {
         this.emit("log", line);
       }
     });
-    this.proc.on("exit", () => {
+    this.proc.stderr?.on("data", (chunk) => {
+      const line = String(chunk || "").trim();
+      this.stderrBuffer = `${this.stderrBuffer}${String(chunk || "")}`.slice(-10_000);
+      if (line) {
+        this.emit("log", line);
+      }
+    });
+    this.proc.on("error", (error) => {
       this.connected = false;
       this.initialized = false;
       this.ws = null;
+      this.rejectPending(error);
+      this.emit("error", error);
     });
+    this.proc.on("exit", (code, signal) => {
+      this.connected = false;
+      this.initialized = false;
+      this.ws = null;
+      const detail = this.stderrBuffer.trim() ? `: ${this.stderrBuffer.trim().slice(-500)}` : "";
+      const error = new Error(`codex app-server exited code=${code ?? "null"} signal=${signal ?? "null"}${detail}`);
+      this.rejectPending(error);
+      if (!this.shuttingDown) {
+        this.emit("error", error);
+      }
+    });
+    if (this.transport === "stdio") {
+      this.connected = true;
+    }
     await wait(350);
   }
 
@@ -100,7 +140,31 @@ export class AppServerBridge extends EventEmitter {
     this.ws.on("close", () => {
       this.connected = false;
       this.initialized = false;
+      if (!this.shuttingDown) {
+        const error = new Error("app-server websocket closed");
+        this.rejectPending(error);
+        this.emit("error", error);
+      }
     });
+  }
+
+  isTransportReady() {
+    if (!this.connected || !this.proc || this.proc.killed || this.proc.exitCode !== null) {
+      return false;
+    }
+    if (this.transport === "ws") {
+      return this.ws?.readyState === WebSocket.OPEN;
+    }
+    return Boolean(this.proc.stdin?.writable);
+  }
+
+  handleStdoutData(chunk) {
+    this.stdoutBuffer += String(chunk || "");
+    const lines = this.stdoutBuffer.split(/\r?\n/);
+    this.stdoutBuffer = lines.pop() || "";
+    for (const line of lines) {
+      this.handleMessage(line);
+    }
   }
 
   handleMessage(raw) {
@@ -133,29 +197,45 @@ export class AppServerBridge extends EventEmitter {
   }
 
   sendResponse(id, result) {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      return;
-    }
-    this.ws.send(
-      JSON.stringify({
-        jsonrpc: "2.0",
-        id,
-        result
-      })
-    );
+    this.sendPayload({
+      jsonrpc: "2.0",
+      id,
+      result
+    });
   }
 
   sendError(id, code, message) {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      return;
+    this.sendPayload({
+      jsonrpc: "2.0",
+      id,
+      error: { code, message }
+    });
+  }
+
+  sendPayload(payload) {
+    const raw = JSON.stringify(payload);
+    if (this.transport === "ws") {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        return false;
+      }
+      try {
+        this.ws.send(raw);
+        return true;
+      } catch (error) {
+        this.emit("error", error);
+        return false;
+      }
     }
-    this.ws.send(
-      JSON.stringify({
-        jsonrpc: "2.0",
-        id,
-        error: { code, message }
-      })
-    );
+    if (!this.proc?.stdin?.writable) {
+      return false;
+    }
+    try {
+      this.proc.stdin.write(`${raw}\n`);
+      return true;
+    } catch (error) {
+      this.emit("error", error);
+      return false;
+    }
   }
 
   handleServerRequest(msg) {
@@ -195,13 +275,12 @@ export class AppServerBridge extends EventEmitter {
   }
 
   request(method, params) {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      return Promise.reject(new Error("app-server websocket not connected"));
+    if (!this.isTransportReady()) {
+      return Promise.reject(new Error(`app-server ${this.transport} not connected`));
     }
     const requestTimeoutMs = Math.max(1_000, Number(this.config.codexAppServerRequestTimeoutMs) || 20_000);
     const id = this.nextId++;
     const payload = { jsonrpc: "2.0", id, method, params };
-    this.ws.send(JSON.stringify(payload));
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
@@ -217,7 +296,19 @@ export class AppServerBridge extends EventEmitter {
           reject(err);
         }
       });
+      if (!this.sendPayload(payload)) {
+        clearTimeout(timer);
+        this.pending.delete(id);
+        reject(new Error(`app-server ${this.transport} send failed: ${method}`));
+      }
     });
+  }
+
+  rejectPending(error) {
+    for (const [id, pending] of this.pending.entries()) {
+      this.pending.delete(id);
+      pending.reject(error);
+    }
   }
 
   async ensureThread(session) {
@@ -256,6 +347,11 @@ export class AppServerBridge extends EventEmitter {
     this.shuttingDown = true;
     try {
       this.ws?.close();
+    } catch {
+      // no-op
+    }
+    try {
+      this.proc?.stdin?.end();
     } catch {
       // no-op
     }

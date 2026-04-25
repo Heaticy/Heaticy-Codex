@@ -73,6 +73,7 @@ export const config = {
   codexNoAltScreen: boolEnv("CODEX_NO_ALT_SCREEN", true),
   codexExtraArgs: listEnv("CODEX_EXTRA_ARGS"),
   codexAppServerEnabled: boolEnv("CODEX_APP_SERVER_ENABLED", true),
+  codexAppServerTransport: env("CODEX_APP_SERVER_TRANSPORT", "stdio").toLowerCase(),
   codexAppServerListenUrl: env("CODEX_APP_SERVER_LISTEN_URL", "ws://127.0.0.1:8777"),
   codexAppServerConnectTimeoutMs: intEnv("CODEX_APP_SERVER_CONNECT_TIMEOUT_MS", 10_000),
   codexAppServerRequestTimeoutMs: intEnv("CODEX_APP_SERVER_REQUEST_TIMEOUT_MS", 45_000),

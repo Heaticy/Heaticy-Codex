@@ -1249,6 +1249,7 @@ export class SessionManager {
           console.warn(`[app-server] ${text}`);
         }
       });
+      this.appServerBridge.on("error", (error) => this.handleAppServerBridgeError(error));
     }
   }
 
@@ -1436,6 +1437,7 @@ export class SessionManager {
         turnRunning: false,
         turnHadVisibleOutput: false,
         turnNoReplyNotified: false,
+        appServerReconnectAttempts: 0,
         runningProcess: null,
         queuedInputs: [],
         sessionType: "main",
@@ -1648,6 +1650,8 @@ export class SessionManager {
     try {
       const result = await this.appServerBridge.startTurn(session, prompt);
       this.handleAppServerTurnResult(session, result);
+      session.status = "running";
+      session.appServerReconnectAttempts = 0;
       session.turnRunning = false;
       session.updatedAt = nowIso();
       this.broadcast(session, { type: "session_updated", session: this.serialize(session) });
@@ -1655,10 +1659,22 @@ export class SessionManager {
     } catch (error) {
       session.turnRunning = false;
       session.updatedAt = nowIso();
+      const message = error?.message || String(error);
+      const canRetry =
+        /app-server|websocket|stdio|not connected|send failed|exited|closed/i.test(message) &&
+        (session.appServerReconnectAttempts || 0) < 3;
+      if (canRetry) {
+        session.appServerReconnectAttempts = (session.appServerReconnectAttempts || 0) + 1;
+        session.status = "reconnecting";
+        session.queuedInputs.unshift(prompt);
+        this.broadcast(session, { type: "session_updated", session: this.serialize(session) });
+        setTimeout(() => this.maybeStartAppServerTurn(session), 1_000).unref();
+        return;
+      }
       this.broadcast(session, {
         type: "message_part",
         role: "system",
-        part: { type: "text", text: `Codex app-server 执行失败：${error?.message || String(error)}` },
+        part: { type: "text", text: `Codex app-server 执行失败：${message}` },
         phase: "final",
         timestamp: nowIso()
       });
@@ -1927,6 +1943,19 @@ export class SessionManager {
       console.warn(
         `[app-server] unhandled notification session=${session.id} thread=${threadId} method=${method || "unknown"} itemType=${itemType || "none"}`
       );
+    }
+  }
+
+  handleAppServerBridgeError(error) {
+    const message = error?.message || String(error);
+    console.warn(`[app-server] ${message}`);
+    for (const session of this.sessions.values()) {
+      if (session.runnerMode !== "app_server" || session.status === "exited") {
+        continue;
+      }
+      session.status = "reconnecting";
+      session.updatedAt = nowIso();
+      this.broadcast(session, { type: "session_updated", session: this.serialize(session) });
     }
   }
 

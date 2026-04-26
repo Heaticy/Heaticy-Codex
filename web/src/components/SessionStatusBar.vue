@@ -30,9 +30,20 @@ const cwdLabel = computed(() => {
   return parts.at(-1) || cwd.value;
 });
 const turnState = computed(() => String(props.meta?.turnState || "idle"));
-const modelLabel = computed(() => String(props.meta?.model || "Codex default").trim());
+const turnStateLabel = computed(() => {
+  const labels = {
+    idle: "空闲",
+    running: "运行中",
+    queued: "排队中",
+    resumed: "已恢复",
+    failed: "失败"
+  };
+  return labels[turnState.value] || turnState.value;
+});
+const modelLabel = computed(() => String(props.meta?.model || "Codex 默认").trim());
 const reasoningEffort = computed(() => String(props.meta?.reasoningEffort || "").trim());
-const relativeLastEvent = computed(() => (props.meta?.lastEventAt ? formatRelativeTime(props.meta.lastEventAt) : "暂无事件"));
+const transportLabel = computed(() => String(props.meta?.transport || "").trim() || "未连接 runner");
+const relativeLastEvent = computed(() => (props.meta?.lastEventAt ? formatRelativeTime(props.meta.lastEventAt) : "暂无运行事件"));
 
 function copyCwd() {
   if (typeof navigator !== "undefined" && navigator.clipboard && cwd.value) {
@@ -49,14 +60,14 @@ function openRaw() {
 <template>
   <section class="session-status-bar">
     <div class="status-main">
-      <span class="turn-badge" :data-state="turnState">{{ turnState }}</span>
+      <span class="turn-badge" :data-state="turnState">{{ turnStateLabel }}</span>
       <strong class="model-chip">
         <span>MODEL</span>
         {{ modelLabel }}
         <em v-if="reasoningEffort">{{ reasoningEffort }}</em>
       </strong>
       <span v-if="meta.profile" class="status-pill">profile {{ meta.profile }}</span>
-      <span class="status-pill">transport {{ meta.transport || "unknown" }}</span>
+      <span class="status-pill">运行通道 {{ transportLabel }}</span>
       <button class="cwd-chip" type="button" :title="cwd" @click="cwdExpanded = !cwdExpanded">{{ cwdLabel }}</button>
       <button class="icon-action" type="button" title="复制 cwd" @click="copyCwd">⧉</button>
       <span class="status-time">{{ relativeLastEvent }}</span>

@@ -19,7 +19,12 @@
 }
 
 * { box-sizing: border-box; }
-html, body, #app { margin: 0; min-height: 100%; }
+html, body, #app {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+  overflow-x: hidden;
+}
 body {
   background: #050b14;
   color: var(--text);
@@ -30,7 +35,15 @@ button, input, textarea { font: inherit; }
 button { border: 0; background: none; cursor: pointer; }
 pre { margin: 0; font: inherit; white-space: pre-wrap; word-break: break-word; }
 
-.app-shell, .mobile-shell { min-height: 100vh; }
+.app-shell, .mobile-shell {
+  min-height: 100vh;
+}
+
+.app-shell {
+  width: 100vw;
+  max-width: 100vw;
+  overflow-x: hidden;
+}
 .splash-screen, .login-view {
   min-height: 100vh;
   display: grid;
@@ -207,8 +220,11 @@ pre { margin: 0; font: inherit; white-space: pre-wrap; word-break: break-word; }
 .notice-strip { padding: 0 18px 18px; }
 
 .workbench-shell {
+  width: 100vw;
+  max-width: 100vw;
   min-height: 100vh;
   background: #050b14;
+  overflow-x: hidden;
 }
 
 .project-sidebar,
@@ -600,6 +616,8 @@ pre { margin: 0; font: inherit; white-space: pre-wrap; word-break: break-word; }
 
   .model-switcher select {
     width: 100%;
+    min-width: 0;
+    max-width: 100%;
     min-height: 32px;
     border: 1px solid rgba(125, 185, 255, 0.22);
     border-radius: 7px;
@@ -607,6 +625,7 @@ pre { margin: 0; font: inherit; white-space: pre-wrap; word-break: break-word; }
     color: #f3f8ff;
     padding: 0 8px;
     outline: none;
+    text-overflow: ellipsis;
   }
 
   .model-switcher select:focus {

@@ -2746,6 +2746,7 @@ export class SessionManager {
       name: finalName,
       titleSource: finalTitleSource,
       cwd: entry.cwd,
+      projectId: this.projectStore.idForCwd(entry.cwd),
       kind,
       status: kind === "archived" ? "archived" : "saved",
       createdAt: entry.stat.birthtime.toISOString(),

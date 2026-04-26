@@ -72,6 +72,10 @@ export class ProjectStore {
     this.save();
     return project;
   }
+
+  idForCwd(cwd) {
+    return stableProjectId(path.resolve(String(cwd || process.cwd())));
+  }
 }
 
 export const testInternals = {

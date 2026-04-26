@@ -818,6 +818,13 @@ function clearPendingReplyStatus() {
   }
 }
 
+function clearStallWarningIfRecovered(sessionId, meta = null) {
+  const turnState = String(meta?.turnState || "").trim();
+  if (!turnState || turnState === "idle" || turnState === "resumed") {
+    state.stallWarnings[sessionId] = null;
+  }
+}
+
 async function hydrateSession(session, { includeMessages = false, silent = false } = {}) {
   if (!session || session.kind !== "history" || !session.resumeSessionId) {
     return null;
@@ -1113,6 +1120,7 @@ function attachLiveSocket(sessionId, historyMessages = []) {
       if (state.activeSessionId === sessionId) {
         state.activeSessionMeta = { ...(state.activeSessionMeta || {}), ...payload.meta };
       }
+      clearStallWarningIfRecovered(sessionId, payload.meta);
       return;
     }
 
@@ -1131,6 +1139,7 @@ function attachLiveSocket(sessionId, historyMessages = []) {
     }
 
     if (payload.type === "data") {
+      state.stallWarnings[sessionId] = null;
       if (payload.data && String(payload.data).trim()) {
         clearPendingReplyStatus();
       }
@@ -1139,6 +1148,7 @@ function attachLiveSocket(sessionId, historyMessages = []) {
     }
 
     if (payload.type === "message_part") {
+      state.stallWarnings[sessionId] = null;
       if (payload?.part?.type === "text" && String(payload?.part?.text || "").trim()) {
         clearPendingReplyStatus();
       }

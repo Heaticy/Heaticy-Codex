@@ -244,6 +244,72 @@ const renderedMessages = computed(() =>
   })
 );
 
+function formatProcessGroupSummary(messages) {
+  const counts = new Map();
+  for (const message of messages) {
+    const label = message.eventLabel || "运行事件";
+    counts.set(label, (counts.get(label) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([label, count]) => `${label} ${count}`)
+    .join(" / ");
+}
+
+function formatProcessGroupText(messages) {
+  return messages
+    .map((message, index) => {
+      const title = `${index + 1}. ${message.eventLabel || "运行事件"}${message.eventPhase ? ` (${message.eventPhase})` : ""}`;
+      const text = String(message.processText || "").trim();
+      return text ? `${title}\n${text}` : title;
+    })
+    .join("\n\n");
+}
+
+const renderedTimelineItems = computed(() => {
+  const items = [];
+  let processGroup = null;
+
+  const flushProcessGroup = () => {
+    if (!processGroup) {
+      return;
+    }
+    const messages = processGroup.messages;
+    items.push({
+      id: processGroup.id,
+      type: "process_group",
+      role: "assistant",
+      messages,
+      count: messages.length,
+      summary: formatProcessGroupSummary(messages),
+      preview: messages.find((message) => message.eventPreview)?.eventPreview || "",
+      processText: formatProcessGroupText(messages),
+      active: messages.some((message) => message.eventPhase && message.eventPhase !== "final")
+    });
+    processGroup = null;
+  };
+
+  for (const message of renderedMessages.value) {
+    if (message.renderKind === "event") {
+      if (!processGroup) {
+        processGroup = { id: `process-${message.id}`, messages: [] };
+      }
+      processGroup.messages.push(message);
+      continue;
+    }
+
+    flushProcessGroup();
+    items.push({
+      id: message.id,
+      type: "message",
+      role: message.role,
+      message
+    });
+  }
+
+  flushProcessGroup();
+  return items;
+});
+
 const hasAnyProcessDetails = computed(() => renderedMessages.value.some((message) => message.hasProcessDetails));
 const visibleThreadId = computed(() => String(props.threadId || props.expectedThreadId || "").trim());
 const threadHint = computed(() => {
@@ -456,30 +522,44 @@ onBeforeUnmount(() => {
       />
       <div v-if="activeActivity" class="activity-strip">{{ activeActivity }}</div>
       <section ref="messageListEl" class="message-stream" @scroll="handleStreamScroll">
-        <article v-for="message in renderedMessages" :key="message.id" class="message-item" :class="message.role">
-          <div v-if="message.renderKind === 'image'" class="message-bubble image-bubble">
-            <img class="message-image" :src="message.imageUrl" :alt="message.imageAlt" loading="lazy" decoding="async" />
-          </div>
+        <article v-for="item in renderedTimelineItems" :key="item.id" class="message-item" :class="item.role">
+          <template v-if="item.type === 'message'">
+            <div v-if="item.message.renderKind === 'image'" class="message-bubble image-bubble">
+              <img class="message-image" :src="item.message.imageUrl" :alt="item.message.imageAlt" loading="lazy" decoding="async" />
+            </div>
 
-          <div v-else-if="message.displayText || message.role === 'user'" class="message-bubble">
-            <div class="message-text markdown-body" v-html="message.renderedHtml"></div>
-          </div>
+            <div v-else-if="item.message.displayText || item.message.role === 'user'" class="message-bubble">
+              <div class="message-text markdown-body" v-html="item.message.renderedHtml"></div>
+            </div>
 
-          <details v-else-if="message.renderKind === 'event'" class="event-card" :open="message.partType === 'reasoning' && !isTouchDevice">
+            <details v-if="showProcessDetails && item.message.hasProcessDetails" class="message-process">
+              <summary>{{ item.message.processSummary }}</summary>
+              <pre class="message-process-text">{{ item.message.processText }}</pre>
+            </details>
+          </template>
+
+          <details v-else class="process-group-card">
             <summary>
-              <span>
-                {{ message.eventLabel }}
-                <em v-if="message.eventPreview">{{ message.eventPreview }}</em>
-                <small v-if="turnIsActive && message.eventPhase && message.eventPhase !== 'final'">运行中…</small>
+              <span class="process-group-main">
+                <strong>运行详情</strong>
+                <small>{{ item.count }} 条 · {{ item.summary }}</small>
+                <em v-if="item.preview">{{ item.preview }}</em>
               </span>
-              <button type="button" @click.prevent="copyText(message.processText)">复制</button>
+              <span class="process-group-actions">
+                <span v-if="turnIsActive && item.active" class="process-live">运行中</span>
+                <button type="button" @click.prevent="copyText(item.processText)">复制全部</button>
+              </span>
             </summary>
-            <pre class="event-card-text">{{ message.processText }}</pre>
-          </details>
-
-          <details v-if="showProcessDetails && message.hasProcessDetails" class="message-process">
-            <summary>{{ message.processSummary }}</summary>
-            <pre class="message-process-text">{{ message.processText }}</pre>
+            <ol class="process-event-list">
+              <li v-for="message in item.messages" :key="message.id" class="process-event-row">
+                <div class="process-event-head">
+                  <strong>{{ message.eventLabel }}</strong>
+                  <span v-if="message.eventPhase">{{ message.eventPhase }}</span>
+                  <button type="button" @click.prevent="copyText(message.processText)">复制</button>
+                </div>
+                <pre>{{ message.processText }}</pre>
+              </li>
+            </ol>
           </details>
         </article>
 
@@ -875,78 +955,134 @@ onBeforeUnmount(() => {
   word-break: break-word;
 }
 
-.event-card {
+.process-group-card {
   width: min(760px, 100%);
-  border: 1px solid rgba(148, 163, 184, 0.34);
-  border-radius: 8px;
-  background: #f8fafc;
-  color: #1e293b;
+  border: 1px solid rgba(88, 166, 255, 0.18);
+  border-radius: 10px;
+  background: rgba(8, 20, 42, 0.78);
+  color: #dbeafe;
   overflow: hidden;
 }
 
-.event-card summary {
-  display: flex;
+.process-group-card summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
-  min-height: 38px;
-  padding: 8px 10px;
+  min-height: 44px;
+  padding: 10px 12px;
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
 }
 
-.event-card summary span {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+.process-group-card summary::-webkit-details-marker {
+  display: none;
+}
+
+.process-group-main {
+  display: grid;
+  gap: 3px;
   min-width: 0;
 }
 
-.event-card summary em {
+.process-group-main strong {
+  color: #bfdbfe;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.process-group-main small,
+.process-group-main em {
   min-width: 0;
-  max-width: min(520px, 58vw);
   overflow: hidden;
-  color: #0f172a;
-  font-family: var(--font-mono);
+  color: #7f9fbd;
   font-size: 11px;
-  font-style: normal;
-  font-weight: 700;
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.event-card summary small {
-  flex: 0 0 auto;
-  color: #0f766e;
+.process-group-main em {
+  color: #8fd7ef;
+  font-family: var(--font-mono);
+  font-style: normal;
+}
+
+.process-group-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.process-live {
+  color: #5eead4;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.process-group-actions button,
+.process-event-head button {
+  border: 1px solid rgba(125, 185, 255, 0.24);
+  border-radius: 7px;
+  background: rgba(15, 35, 70, 0.7);
+  color: #bae6fd;
+  padding: 4px 8px;
   font-size: 11px;
 }
 
-.event-card summary::-webkit-details-marker {
-  display: none;
+.process-event-list {
+  display: grid;
+  gap: 8px;
+  max-height: min(52vh, 520px);
+  margin: 0;
+  padding: 0 10px 10px;
+  overflow: auto;
+  list-style: none;
 }
 
-.event-card summary button {
-  border: 1px solid rgba(148, 163, 184, 0.34);
-  border-radius: 6px;
-  background: #fff;
-  color: #334155;
-  padding: 3px 8px;
+.process-event-row {
+  min-width: 0;
+  border: 1px solid rgba(88, 166, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(3, 10, 23, 0.62);
+  overflow: hidden;
+}
+
+.process-event-head {
+  display: grid;
+  grid-template-columns: minmax(0, max-content) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(88, 166, 255, 0.1);
+}
+
+.process-event-head strong {
+  color: #dbeafe;
   font-size: 12px;
+  line-height: 1.2;
 }
 
-.event-card-text {
-  max-height: 260px;
+.process-event-head span {
+  min-width: 0;
+  overflow: hidden;
+  color: #7f9fbd;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.process-event-row pre {
+  max-height: 220px;
   overflow: auto;
   margin: 0;
-  padding: 10px;
-  border-top: 1px solid rgba(148, 163, 184, 0.2);
-  background: #0f172a;
-  color: #e2e8f0;
+  padding: 8px;
+  color: #b9cce1;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: var(--font-mono);
-  font-size: 12px;
 }
 
 .empty-state {

@@ -33,6 +33,10 @@ const turnState = computed(() => String(props.meta?.turnState || "idle"));
 const turnStateLabel = computed(() => {
   const labels = {
     idle: "空闲",
+    thinking: "思考中",
+    executing: "执行中",
+    waiting_approval: "待确认",
+    error: "错误",
     running: "运行中",
     queued: "排队中",
     resumed: "已恢复",
@@ -40,6 +44,7 @@ const turnStateLabel = computed(() => {
   };
   return labels[turnState.value] || turnState.value;
 });
+const showStallWarning = computed(() => Boolean(props.stallWarning) && !["idle", "resumed"].includes(turnState.value));
 const modelLabel = computed(() => String(props.meta?.model || "Codex 默认").trim());
 const reasoningEffort = computed(() => String(props.meta?.reasoningEffort || "").trim());
 const transportLabel = computed(() => String(props.meta?.transport || "").trim() || "未连接 runner");
@@ -73,7 +78,7 @@ function openRaw() {
       <span class="status-time">{{ relativeLastEvent }}</span>
     </div>
 
-    <div v-if="stallWarning" class="stall-actions">
+    <div v-if="showStallWarning" class="stall-actions">
       <strong>&gt;30s 无新事件，可能卡住</strong>
       <button type="button" @click="emit('ping')">重发心跳</button>
       <button type="button" @click="openRaw">原始 JSONL</button>

@@ -8,3 +8,4 @@ server.err.log
 tmp-*.log
 *-test*.png
 web/dist/
+.codex

@@ -124,21 +124,79 @@ function isProcessLine(line) {
   return PROCESS_PATTERNS.some((pattern) => pattern.test(compact));
 }
 
+function markdownFenceForLine(line) {
+  const match = String(line || "").match(/^\s*(`{3,}|~{3,})/);
+  if (!match) {
+    return null;
+  }
+  return {
+    marker: match[1][0],
+    length: match[1].length
+  };
+}
+
+function closesMarkdownFence(line, fence) {
+  if (!fence) {
+    return false;
+  }
+  const match = String(line || "").match(/^\s*(`{3,}|~{3,})\s*$/);
+  return Boolean(match && match[1][0] === fence.marker && match[1].length >= fence.length);
+}
+
+function trimBlankLineEdges(lines) {
+  let start = 0;
+  let end = lines.length;
+  while (start < end && !String(lines[start] || "").trim()) {
+    start += 1;
+  }
+  while (end > start && !String(lines[end - 1] || "").trim()) {
+    end -= 1;
+  }
+  return lines.slice(start, end);
+}
+
 function splitMessageParts(message) {
   const text = String(message?.text || "").trim();
   if (!text || message?.role === "user") {
     return { primary: text, process: "" };
   }
 
-  const lines = text
-    .split("\n")
-    .map((line) => line.trimEnd())
-    .filter((line) => String(line || "").trim().length > 0);
+  const lines = text.split("\n").map((line) => line.trimEnd());
+  const processLines = [];
+  const visibleLines = [];
+  let openFence = null;
 
-  const processLines = lines.filter((line) => isProcessLine(line));
-  const visibleLines = lines.filter((line) => !isProcessLine(line));
+  for (const line of lines) {
+    if (openFence) {
+      visibleLines.push(line);
+      if (closesMarkdownFence(line, openFence)) {
+        openFence = null;
+      }
+      continue;
+    }
+
+    const fence = markdownFenceForLine(line);
+    if (fence) {
+      openFence = fence;
+      visibleLines.push(line);
+      continue;
+    }
+
+    if (!String(line || "").trim()) {
+      visibleLines.push(line);
+      continue;
+    }
+
+    if (isProcessLine(line)) {
+      processLines.push(line);
+      continue;
+    }
+
+    visibleLines.push(line);
+  }
+
   return {
-    primary: visibleLines.join("\n").trim(),
+    primary: trimBlankLineEdges(visibleLines).join("\n"),
     process: processLines.join("\n").trim()
   };
 }
@@ -870,6 +928,8 @@ onBeforeUnmount(() => {
 }
 
 .markdown-body :deep(pre code) {
+  display: block;
+  min-width: 100%;
   padding: 0;
   border-radius: 0;
   background: transparent;

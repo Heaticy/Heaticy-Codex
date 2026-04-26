@@ -251,6 +251,42 @@ export function cleanVisibleChatText(value) {
   return cleanVisibleLines(value).join("\n").trim();
 }
 
+function markdownFenceForLine(line) {
+  const match = String(line || "").match(/^\s*(`{3,}|~{3,})/);
+  if (!match) {
+    return null;
+  }
+  return {
+    marker: match[1][0],
+    length: match[1].length
+  };
+}
+
+function closesMarkdownFence(line, fence) {
+  if (!fence) {
+    return false;
+  }
+  const match = String(line || "").match(/^\s*(`{3,}|~{3,})\s*$/);
+  return Boolean(match && match[1][0] === fence.marker && match[1].length >= fence.length);
+}
+
+function isMarkdownStructureLine(line) {
+  const text = compactLine(line);
+  return /^```/.test(text) || /^~~~/.test(text) || /^[-*•]\s+/.test(text) || /^\d+[.)、]\s+/.test(text) || /^#+\s+/.test(text);
+}
+
+function trimBlankLineEdges(lines) {
+  let start = 0;
+  let end = lines.length;
+  while (start < end && !String(lines[start] || "").trim()) {
+    start += 1;
+  }
+  while (end > start && !String(lines[end - 1] || "").trim()) {
+    end -= 1;
+  }
+  return lines.slice(start, end);
+}
+
 export function sanitizeAssistantText(value) {
   const raw = cleanVisibleChatText(value || "");
   if (!raw) {
@@ -403,28 +439,79 @@ export function extractHistoricalSummaryCandidate(messages, title, fallback = ""
 }
 
 function cleanHistoricalMessageText(value) {
-  const lines = cleanVisibleChatText(value)
+  const lines = [];
+  const rawLines = stripControlChars(applyBackspaces(stripAnsi(value || "")))
+    .replace(/\t/g, "  ")
+    .replace(/\n{4,}/g, "\n\n\n")
     .split("\n")
-    .map((line) => compactLine(line))
-    .filter(Boolean)
-    .filter((line) => !isInstructionLike(line))
-    .filter((line) => !isHistoricalMetaLine(line))
-    .filter((line) => !/^[=~`._-]{1,8}$/.test(line))
-    .filter((line) => !/\bagent-browser\b/i.test(line))
-    .filter((line) => !/default browser automation path/i.test(line))
-    .filter((line) => !/this routing rule applies to both chinese and english/i.test(line))
-    .filter((line) => !/\bmemory-brain\b/i.test(line))
-    .filter((line) => !/^automatic remember triggers[:：]?/i.test(line))
-    .filter((line) => !/^write rules[:：]?/i.test(line))
-    .filter((line) => !/what really changes in the real world and the application layer/i.test(line))
-    .filter((line) => !/^<.*>$/.test(line))
-    .filter((line) => !/^\[.*\]$/.test(line));
+    .map((line) => collapseDoubledAscii(line).trimEnd());
+  let openFence = null;
+
+  for (const rawLine of rawLines) {
+    if (openFence) {
+      lines.push(rawLine);
+      if (closesMarkdownFence(rawLine, openFence)) {
+        openFence = null;
+      }
+      continue;
+    }
+
+    const fence = markdownFenceForLine(rawLine);
+    if (fence) {
+      openFence = fence;
+      lines.push(rawLine.trim());
+      continue;
+    }
+
+    const line = compactLine(rawLine);
+    if (!line) {
+      lines.push("");
+      continue;
+    }
+    if (isInstructionLike(line)) {
+      continue;
+    }
+    if (isHistoricalMetaLine(line) && !isMarkdownStructureLine(line)) {
+      continue;
+    }
+    if (/^[=~`._-]{1,8}$/.test(line)) {
+      continue;
+    }
+    if (/\bagent-browser\b/i.test(line)) {
+      continue;
+    }
+    if (/default browser automation path/i.test(line)) {
+      continue;
+    }
+    if (/this routing rule applies to both chinese and english/i.test(line)) {
+      continue;
+    }
+    if (/\bmemory-brain\b/i.test(line)) {
+      continue;
+    }
+    if (/^automatic remember triggers[:：]?/i.test(line)) {
+      continue;
+    }
+    if (/^write rules[:：]?/i.test(line)) {
+      continue;
+    }
+    if (/what really changes in the real world and the application layer/i.test(line)) {
+      continue;
+    }
+    if (/^<.*>$/.test(line)) {
+      continue;
+    }
+    if (/^\[.*\]$/.test(line)) {
+      continue;
+    }
+    lines.push(rawLine.trimEnd());
+  }
 
   if (!lines.length) {
     return "";
   }
 
-  return lines.join("\n");
+  return trimBlankLineEdges(lines).join("\n").replace(/\n{4,}/g, "\n\n\n");
 }
 
 function shouldMergeHistoricalMessages(last, current) {

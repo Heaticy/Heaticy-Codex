@@ -91,6 +91,7 @@ const state = reactive({
   selectedModel: "",
   selectedReasoningEffort: "",
   commandPaletteOpen: false,
+  projectDrawerOpen: false,
   codexThreadPickerOpen: false,
   approvalRequests: [],
   pendingSessionId: "",
@@ -164,6 +165,10 @@ const selectedProjectId = computed(() => {
   }
   return String(state.activeSessionMeta?.projectId || state.projects[0]?.id || "").trim();
 });
+const selectedProject = computed(() =>
+  state.projects.find((project) => String(project?.id || "") === selectedProjectId.value) || null
+);
+const selectedProjectLabel = computed(() => selectedProject.value?.label || workbenchGroups.value[0]?.name || "全部会话");
 
 const decoratedSessions = computed(() =>
   state.sessions
@@ -1382,7 +1387,18 @@ async function openProject(project) {
   state.activeSessionMeta = null;
   composerDraft.value = "";
   setMessages([]);
+  state.projectDrawerOpen = false;
   await router.push({ name: "project", params: { projectId } });
+}
+
+async function openProjectFromDrawer(project) {
+  state.projectDrawerOpen = false;
+  await openProject(project);
+}
+
+async function openSessionFromDrawer(session) {
+  state.projectDrawerOpen = false;
+  await openSessionItem(session);
 }
 
 async function deleteSessionItem(session) {
@@ -1933,7 +1949,13 @@ if (typeof window !== 'undefined') {
             <header class="mobile-header list">
               <div class="header-copy">
                 <h1>会话</h1>
+                <button class="mobile-project-trigger" type="button" @click="state.projectDrawerOpen = true">
+                  {{ selectedProjectLabel }}
+                </button>
               </div>
+              <button class="mobile-nav-action" type="button" aria-label="切换项目" @click="state.projectDrawerOpen = true">
+                项目
+              </button>
             </header>
 
             <SessionListView
@@ -2011,6 +2033,42 @@ if (typeof window !== 'undefined') {
             <small>{{ thread.cwd }} · {{ formatRelativeTime(thread.createdAt) }}</small>
           </span>
         </button>
+      </aside>
+
+      <aside v-if="state.projectDrawerOpen" class="mobile-project-drawer" aria-label="切换项目">
+        <header>
+          <div>
+            <p>Projects</p>
+            <h2>切换工作区</h2>
+          </div>
+          <button type="button" @click="state.projectDrawerOpen = false">关闭</button>
+        </header>
+        <section class="drawer-section">
+          <button
+            v-for="project in state.projects"
+            :key="project.id"
+            class="drawer-project-row"
+            :class="{ active: project.id === selectedProjectId }"
+            type="button"
+            @click="openProjectFromDrawer(project)"
+          >
+            <span class="project-swatch" :style="{ background: project.color }"></span>
+            <span>{{ project.label }}</span>
+          </button>
+        </section>
+        <section class="drawer-section">
+          <p class="drawer-label">最近会话</p>
+          <button
+            v-for="session in recentSessions"
+            :key="session.id"
+            class="drawer-session-row"
+            type="button"
+            @click="openSessionFromDrawer(session)"
+          >
+            <strong>{{ session.displayTitle }}</strong>
+            <span>{{ session.groupName }} · {{ formatRelativeTime(session.updatedAt) }}</span>
+          </button>
+        </section>
       </aside>
 
       <aside v-if="state.commandPaletteOpen" class="command-palette">

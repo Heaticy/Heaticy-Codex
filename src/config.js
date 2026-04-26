@@ -33,6 +33,10 @@ function listEnv(name) {
     .filter(Boolean);
 }
 
+function uniqueList(values) {
+  return [...new Set(values.map((value) => String(value || "").trim()).filter(Boolean))];
+}
+
 function readCodexConfigString(codexHome, key) {
   try {
     const configPath = path.join(codexHome, "config.toml");
@@ -67,6 +71,16 @@ const codexHome = env("CODEX_HOME", path.join(home, ".codex"));
 const generatedToken = crypto.randomBytes(18).toString("base64url");
 const shellBin = env("SHELL_BIN", inferShellBin());
 const shellArgs = env("SHELL_ARGS") ? listEnv("SHELL_ARGS") : inferShellArgs();
+const codexDefaultModel = env("CODEX_MODEL", readCodexConfigString(codexHome, "model"));
+const codexModelOptions = uniqueList([
+  codexDefaultModel,
+  ...listEnv("CODEX_MODELS"),
+  "gpt-5.5",
+  "gpt-5.4",
+  "gpt-5.3-codex",
+  "gpt-5.2",
+  "gpt-5.4-mini"
+]);
 
 export const config = {
   root,
@@ -80,9 +94,9 @@ export const config = {
   shellArgs,
   shellQuoteStyle: env("SHELL_QUOTE_STYLE", inferShellQuoteStyle()),
   codexBin: env("CODEX_BIN", "codex"),
-  codexModel: env("CODEX_MODEL", readCodexConfigString(codexHome, "model")),
+  codexModel: codexDefaultModel,
   codexReasoningEffort: env("CODEX_MODEL_REASONING_EFFORT", readCodexConfigString(codexHome, "model_reasoning_effort")),
-  codexModels: listEnv("CODEX_MODELS"),
+  codexModels: codexModelOptions,
   codexProfile: env("CODEX_PROFILE", ""),
   codexFullAccess: boolEnv("CODEX_FULL_ACCESS", true),
   codexNoAltScreen: boolEnv("CODEX_NO_ALT_SCREEN", true),

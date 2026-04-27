@@ -37,6 +37,7 @@ This file is the handoff entry for a new agent working in this repository.
 - Preserve WebSocket heartbeat behavior when touching `src/routes/ws.js`; clients may rely on both app-level and protocol-level ping/pong.
 - Do not remove the no-reply fallback unless replacing it with an equivalent user-visible failure state.
 - After a feature is implemented and accepted/validated, commit that feature as its own version before starting unrelated work.
+- One complete acceptance pass is enough to commit: once the relevant tests/build/manual checks pass and the scope is reviewed, create the scoped commit instead of repeating the same validation loop.
 
 ## Before Editing
 

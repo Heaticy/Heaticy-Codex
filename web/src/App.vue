@@ -481,10 +481,13 @@ function saveTokenPreference(token) {
 
 function setMessages(messages, sessionId = state.activeSessionId) {
   const key = String(sessionId || "");
+  const visibleMessages = messages.filter(
+    (message) => message?.text || (message?.partType === "image" && String(message?.payload?.url || "").trim())
+  );
   if (key) {
-    state.sessionMessages[key] = messages.filter((message) => message?.text);
+    state.sessionMessages[key] = visibleMessages;
   }
-  state.activeMessages = messages.filter((message) => message?.text);
+  state.activeMessages = visibleMessages;
   rebuildReplaySuppressionLines(state.activeMessages);
 }
 
@@ -568,7 +571,9 @@ function getSessionMessages(sessionId) {
 
 function storeSessionMessages(sessionId, messages) {
   const key = String(sessionId || state.activeSessionId || "");
-  const clean = messages.filter((message) => message?.text);
+  const clean = messages.filter(
+    (message) => message?.text || (message?.partType === "image" && String(message?.payload?.url || "").trim())
+  );
   if (key) {
     state.sessionMessages[key] = clean;
   }

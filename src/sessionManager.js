@@ -258,11 +258,15 @@ function extractImagePartsFromMarkdown(text) {
   }
 
   const images = [];
-  const cleaned = source.replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/gi, (_, alt, url) => {
+  const cleaned = source.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_, alt, url) => {
+    const imageUrl = String(url || "").trim();
+    if (!isRenderableImageUrl(imageUrl)) {
+      return _;
+    }
     images.push({
       type: "image",
       alt: String(alt || "").trim(),
-      url: String(url || "").trim()
+      url: imageUrl
     });
     return "";
   });
@@ -282,6 +286,20 @@ function normalizeSymbolToken(value) {
 
 function isAgentMessageType(value) {
   return normalizeSymbolToken(value) === "agentmessage";
+}
+
+function isRenderableImageUrl(url) {
+  const value = String(url || "").trim();
+  if (!value) {
+    return false;
+  }
+  return (
+    /^data:image\//i.test(value) ||
+    /^https?:\/\//i.test(value) ||
+    /^blob:/i.test(value) ||
+    value.startsWith("/uploads/") ||
+    value.startsWith("/api/")
+  );
 }
 
 function eventKindForItem(item, phase = "") {
@@ -916,7 +934,7 @@ function normalizeHistoricalRole(record) {
     }
     if (type === "agent_message") {
       const phase = String(record.payload?.phase || "").trim().toLowerCase();
-      if (phase && phase !== "final_answer") {
+      if (phase && phase !== "final_answer" && phase !== "commentary") {
         return "";
       }
       return "assistant";
@@ -926,7 +944,61 @@ function normalizeHistoricalRole(record) {
   return "";
 }
 
+function buildHistoricalProcessEntry(record, fallbackTimestamp) {
+  const timestamp = resolveRecordTimestamp(record, fallbackTimestamp);
+
+  if (record?.type === "event_msg") {
+    const payload = record?.payload || {};
+    const type = String(payload?.type || "").trim().toLowerCase();
+    if (type !== "agent_message") {
+      return null;
+    }
+    const phase = String(payload?.phase || "").trim().toLowerCase();
+    if (!phase || phase === "final_answer" || phase === "commentary") {
+      return null;
+    }
+    const rawText =
+      typeof payload.message === "string" ? payload.message : extractTextContentFromPayload(payload).join("\n");
+    const text = cleanHistoricalMessageText(rawText);
+    if (!text) {
+      return null;
+    }
+    return {
+      role: "assistant",
+      text,
+      timestamp,
+      partType: phase === "reasoning" ? "reasoning" : "command_output",
+      payload: { text, phase },
+      rawType: "agent_message"
+    };
+  }
+
+  if (record?.type === "item.completed") {
+    const item = record.item || {};
+    const kind = eventKindForItem(item, record.type);
+    const text = eventTextForItem(item, kind);
+    if (!kind || kind === "agent_message" || !text) {
+      return null;
+    }
+    return {
+      role: kind === "error" ? "system" : "assistant",
+      text,
+      timestamp,
+      partType: kind,
+      payload: { text, item },
+      rawType: String(item?.type || record.type || "")
+    };
+  }
+
+  return null;
+}
+
 function extractHistoricalMessagesFromRecord(record, fallbackTimestamp) {
+  const processEntry = buildHistoricalProcessEntry(record, fallbackTimestamp);
+  if (processEntry) {
+    return [processEntry];
+  }
+
   const role = normalizeHistoricalRole(record);
   if (!role) {
     return [];
@@ -934,26 +1006,66 @@ function extractHistoricalMessagesFromRecord(record, fallbackTimestamp) {
 
   const payload = record?.payload || {};
   const timestamp = resolveRecordTimestamp(record, fallbackTimestamp);
+  const imageItems = extractImagePayloadItems(payload);
   const rawText =
     typeof payload.message === "string" ? payload.message : extractTextContentFromPayload(payload).join("\n");
-  if (role === "user" && isBoilerplateUserText(rawText)) {
+  if (role === "user" && isBoilerplateUserText(rawText) && imageItems.length === 0) {
     return [];
   }
   const text = cleanHistoricalMessageText(rawText);
-  if (!text) {
+  if (!text && imageItems.length === 0) {
     return [];
   }
 
-  return [{ role, text, timestamp }];
+  const messages = imageItems.map((image) => ({
+    role,
+    text: "",
+    timestamp,
+    partType: "image",
+    payload: image,
+    rawType: ""
+  }));
+  if (text) {
+    const markdownParts = extractImagePartsFromMarkdown(text);
+    for (const image of markdownParts.images) {
+      messages.push({
+        role,
+        text: "",
+        timestamp,
+        partType: "image",
+        payload: { url: image.url, alt: image.alt || "image" },
+        rawType: ""
+      });
+    }
+    if (markdownParts.text.trim()) {
+      messages.push({
+        role,
+        text: markdownParts.text.trim(),
+        timestamp,
+        partType: "markdown",
+        payload: {},
+        rawType: ""
+      });
+    }
+  }
+  return messages;
 }
 
 function appendHistoricalMessage(messages, candidate) {
-  if (!candidate || !candidate.role || !candidate.text) {
+  if (!candidate || !candidate.role) {
+    return;
+  }
+  if (!candidate.text && !(candidate.partType === "image" && String(candidate?.payload?.url || "").trim())) {
     return;
   }
 
   const last = messages[messages.length - 1];
-  if (last && last.role === candidate.role) {
+  if (
+    last &&
+    last.role === candidate.role &&
+    (last.partType || "markdown") === "markdown" &&
+    (candidate.partType || "markdown") === "markdown"
+  ) {
     const lastTimestamp = Date.parse(last.timestamp);
     const candidateTimestamp = Date.parse(candidate.timestamp);
     const gap = Math.abs(lastTimestamp - candidateTimestamp);
@@ -986,7 +1098,10 @@ function appendHistoricalMessage(messages, candidate) {
   messages.push({
     role: candidate.role,
     text: candidate.text,
-    timestamp: candidate.timestamp
+    timestamp: candidate.timestamp,
+    partType: candidate.partType || "markdown",
+    payload: candidate.payload || {},
+    rawType: candidate.rawType || ""
   });
 }
 
@@ -1109,6 +1224,83 @@ function contentTextItems(content) {
   return items;
 }
 
+function contentImageItems(content) {
+  if (!Array.isArray(content)) {
+    return [];
+  }
+
+  const items = [];
+  for (const item of content) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const imageUrl = String(item.image_url || item.url || item.path || "").trim();
+    if ((item.type === "input_image" || item.type === "image" || item.type === "output_image") && imageUrl) {
+      if (isRenderableImageUrl(imageUrl)) {
+        items.push({
+          url: imageUrl,
+          alt: String(item.alt || item.name || "image").trim() || "image"
+        });
+      }
+      continue;
+    }
+    if (Array.isArray(item.content)) {
+      items.push(...contentImageItems(item.content));
+    }
+  }
+  return items;
+}
+
+function extractImagePayloadItems(payload) {
+  if (!payload || typeof payload !== "object") {
+    return [];
+  }
+
+  const images = [];
+  const pushImage = (url, alt = "image") => {
+    const normalizedUrl = String(url || "").trim();
+    if (!isRenderableImageUrl(normalizedUrl)) {
+      return;
+    }
+    images.push({
+      url: normalizedUrl,
+      alt: String(alt || "image").trim() || "image"
+    });
+  };
+
+  for (const key of ["images", "local_images"]) {
+    if (!Array.isArray(payload[key])) {
+      continue;
+    }
+    for (const item of payload[key]) {
+      if (typeof item === "string") {
+        pushImage(item);
+      } else if (item && typeof item === "object") {
+        pushImage(item.url || item.image_url || item.path, item.alt || item.name);
+      }
+    }
+  }
+
+  if (Array.isArray(payload.content)) {
+    images.push(...contentImageItems(payload.content));
+  }
+  if (Array.isArray(payload.message?.content)) {
+    images.push(...contentImageItems(payload.message.content));
+  }
+  if (payload.message?.role === "user" && Array.isArray(payload.message?.content)) {
+    images.push(...contentImageItems(payload.message.content));
+  }
+
+  const seen = new Set();
+  return images.filter((item) => {
+    if (!item.url || seen.has(item.url)) {
+      return false;
+    }
+    seen.add(item.url);
+    return true;
+  });
+}
+
 function userTextsFromPayload(payload) {
   if (!payload || typeof payload !== "object") {
     return [];
@@ -1227,13 +1419,17 @@ function parseHistoricalFile(filePath) {
 
     const candidates = extractHistoricalMessagesFromRecord(record, sessionTimestamp);
     for (const candidate of candidates) {
-      if (!fallbackInput) {
+      if (!fallbackInput && candidate.text) {
         fallbackInput = candidate.text;
       }
-      if (candidate.role === "user" && isBoilerplateUserText(candidate.text)) {
+      if (
+        candidate.role === "user" &&
+        isBoilerplateUserText(candidate.text) &&
+        !(candidate.partType === "image" && String(candidate?.payload?.url || "").trim())
+      ) {
         continue;
       }
-      if (candidate.role === "user" && !firstInput) {
+      if (candidate.role === "user" && candidate.text && !firstInput) {
         firstInput = candidate.text;
       }
       appendHistoricalMessage(messages, candidate);

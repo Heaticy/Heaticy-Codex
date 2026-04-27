@@ -38,6 +38,7 @@ const keyboardInset = ref(0);
 const isPinnedToBottom = ref(true);
 const isTouchDevice = ref(false);
 const showProcessDetails = ref(false);
+const lightboxImage = ref(null);
 
 const chatShellStyle = computed(() => ({
   "--chat-vh": viewportHeight.value ? `${viewportHeight.value}px` : undefined,
@@ -463,6 +464,29 @@ function copyText(text) {
   }
 }
 
+function openLightboxImage(url, alt = "image") {
+  const imageUrl = String(url || "").trim();
+  if (!imageUrl) {
+    return;
+  }
+  lightboxImage.value = {
+    url: imageUrl,
+    alt: String(alt || "image").trim() || "image"
+  };
+}
+
+function closeLightboxImage() {
+  lightboxImage.value = null;
+}
+
+function handleMarkdownBodyClick(event) {
+  const target = event?.target;
+  if (typeof window === "undefined" || !(target instanceof window.HTMLImageElement)) {
+    return;
+  }
+  openLightboxImage(target.currentSrc || target.src || "", target.alt || "image");
+}
+
 function handleStreamScroll(event) {
   isPinnedToBottom.value = isNearBottom(event.target);
 }
@@ -502,6 +526,12 @@ function handleWindowResize() {
   resizeComposer(composerEl.value, { keepBottom: true });
 }
 
+function handleWindowKeydown(event) {
+  if (event.key === "Escape" && lightboxImage.value) {
+    closeLightboxImage();
+  }
+}
+
 watch(
   () => props.messages.map((message) => `${message.id}:${message.text?.length || 0}`).join("|"),
   () => {
@@ -533,6 +563,7 @@ onMounted(() => {
       window.matchMedia?.("(pointer: coarse)").matches ||
       navigator.maxTouchPoints > 0;
     window.addEventListener("resize", handleWindowResize, { passive: true });
+    window.addEventListener("keydown", handleWindowKeydown);
     window.visualViewport?.addEventListener("resize", handleViewportChange, { passive: true });
     window.visualViewport?.addEventListener("scroll", handleViewportChange, { passive: true });
   }
@@ -544,6 +575,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
   if (typeof window !== "undefined") {
     window.removeEventListener("resize", handleWindowResize);
+    window.removeEventListener("keydown", handleWindowKeydown);
     window.visualViewport?.removeEventListener("resize", handleViewportChange);
     window.visualViewport?.removeEventListener("scroll", handleViewportChange);
   }
@@ -583,11 +615,18 @@ onBeforeUnmount(() => {
         <article v-for="item in renderedTimelineItems" :key="item.id" class="message-item" :class="item.role">
           <template v-if="item.type === 'message'">
             <div v-if="item.message.renderKind === 'image'" class="message-bubble image-bubble">
-              <img class="message-image" :src="item.message.imageUrl" :alt="item.message.imageAlt" loading="lazy" decoding="async" />
+              <img
+                class="message-image"
+                :src="item.message.imageUrl"
+                :alt="item.message.imageAlt"
+                loading="lazy"
+                decoding="async"
+                @click="openLightboxImage(item.message.imageUrl, item.message.imageAlt)"
+              />
             </div>
 
             <div v-else-if="item.message.displayText || item.message.role === 'user'" class="message-bubble">
-              <div class="message-text markdown-body" v-html="item.message.renderedHtml"></div>
+              <div class="message-text markdown-body" v-html="item.message.renderedHtml" @click="handleMarkdownBodyClick"></div>
             </div>
 
             <details v-if="showProcessDetails && item.message.hasProcessDetails" class="message-process">
@@ -660,6 +699,18 @@ onBeforeUnmount(() => {
         </button>
       </form>
     </main>
+
+    <div v-if="lightboxImage" class="image-lightbox" @click="closeLightboxImage">
+      <button class="image-lightbox-close" type="button" aria-label="关闭预览" @click.stop="closeLightboxImage">×</button>
+      <img
+        class="image-lightbox-media"
+        :src="lightboxImage.url"
+        :alt="lightboxImage.alt"
+        loading="eager"
+        decoding="async"
+        @click.stop
+      />
+    </div>
   </section>
 </template>
 
@@ -851,6 +902,7 @@ onBeforeUnmount(() => {
   width: auto;
   height: auto;
   border-radius: 10px;
+  cursor: zoom-in;
 }
 
 .message-text {
@@ -981,6 +1033,7 @@ onBeforeUnmount(() => {
   border-radius: 12px;
   border: 1px solid rgba(88, 166, 255, 0.24);
   background: rgba(8, 20, 42, 0.78);
+  cursor: zoom-in;
 }
 
 .message-process {
@@ -1177,6 +1230,42 @@ onBeforeUnmount(() => {
   color: #67e8f9;
   font-size: 12px;
   line-height: 1.4;
+}
+
+.image-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: rgba(2, 6, 23, 0.88);
+  backdrop-filter: blur(12px);
+}
+
+.image-lightbox-media {
+  display: block;
+  max-width: min(100%, 980px);
+  max-height: 88dvh;
+  width: auto;
+  height: auto;
+  border-radius: 12px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+}
+
+.image-lightbox-close {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 14px);
+  right: calc(env(safe-area-inset-right) + 14px);
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.86);
+  color: #e2e8f0;
+  font-size: 24px;
+  line-height: 1;
 }
 
 .composer {

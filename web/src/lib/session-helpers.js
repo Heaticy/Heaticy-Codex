@@ -564,12 +564,47 @@ export function isLowSignalTitle(title, session) {
 export function normalizeHistoryMessages(messages) {
   const normalized = [];
   for (const item of messages || []) {
-    const role = item?.role === "user" ? "user" : "assistant";
+    const role = item?.role === "user" ? "user" : item?.role === "system" ? "system" : "assistant";
+    const partType = String(item?.partType || "").trim();
+
+    if (partType === "image") {
+      const url = String(item?.payload?.url || "").trim();
+      if (!url) {
+        continue;
+      }
+      const alt = String(item?.payload?.alt || "image").trim() || "image";
+      normalized.push(
+        createMessage(role, `![${alt}](${url})`, item?.timestamp || "", {
+          source: "history",
+          partType: "image",
+          payload: { url, alt },
+          rawType: item?.rawType || ""
+        })
+      );
+      continue;
+    }
+
     const text = cleanHistoricalMessageText(item?.text || "");
     if (!text) {
       continue;
     }
-    normalized.push(createMessage(role, text, item?.timestamp || "", { source: "history" }));
+    const eventPartTypes = new Set([
+      "reasoning",
+      "command_exec",
+      "command_output",
+      "file_change",
+      "mcp_tool_call",
+      "plan_update",
+      "error"
+    ]);
+    normalized.push(
+      createMessage(role, text, item?.timestamp || "", {
+        source: "history",
+        partType: eventPartTypes.has(partType) ? partType : "markdown",
+        payload: item?.payload || {},
+        rawType: item?.rawType || ""
+      })
+    );
   }
   return normalized;
 }

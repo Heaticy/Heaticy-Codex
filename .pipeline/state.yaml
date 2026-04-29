@@ -1,0 +1,259 @@
+pipeline:
+  name: "heaticy-codex"
+  status: idle
+  prompts_total: 9
+  prompts_completed: 5
+  started: "2026-04-29T01:06:43+08:00"
+  finished: null
+
+last_heartbeat: "2026-04-29T21:05:51+08:00"
+
+current:
+  phase: plan_confirm
+  prompt_index: 5
+  prompt_file: ".pipeline/prompts/05-mobile-instant-bottom-anchor.md"
+  prompt_name: "M6 — Mobile instant bottom anchoring"
+  milestone_id: "M6"
+  step: null
+  step_index: 0
+
+milestones:
+  - id: "M1"
+    title: "Request limit and observability auth"
+    prompt: ".pipeline/prompts/00-request-limit-and-observability-auth.md"
+    status: completed
+    current_step: review_code
+    steps:
+      write_tests: completed
+      review_tests: completed
+      run_tests_red: completed
+      implement: completed
+      run_tests_green: completed
+      review_code: completed
+    tests:
+      command: "npm test"
+      result: "22 passed"
+    check:
+      command: "npm run check"
+      result: "passed"
+  - id: "M2"
+    title: "App-server restart state fix"
+    prompt: ".pipeline/prompts/01-app-server-restart-state.md"
+    status: completed
+    current_step: review_code
+    steps:
+      write_tests: completed
+      review_tests: completed
+      run_tests_red: completed
+      implement: completed
+      run_tests_green: completed
+      review_code: completed
+    tests:
+      command: "npm test"
+      result: "23 passed"
+    check:
+      command: "npm run check"
+      result: "passed"
+  - id: "M3"
+    title: "History cleanup backend"
+    prompt: ".pipeline/prompts/02-history-cleanup-backend.md"
+    status: completed
+    current_step: review_code
+    steps:
+      write_tests: completed
+      review_tests: completed
+      run_tests_red: completed
+      implement: completed
+      run_tests_green: completed
+      review_code: completed
+    tests:
+      command: "npm test"
+      result: "27 passed"
+    check:
+      command: "npm run check"
+      result: "passed"
+  - id: "M4"
+    title: "Maintenance report UI"
+    prompt: ".pipeline/prompts/03-maintenance-report-ui.md"
+    status: completed
+    current_step: review_code
+    steps:
+      write_tests: completed
+      review_tests: completed
+      run_tests_red: completed
+      implement: completed
+      run_tests_green: completed
+      review_code: completed
+    tests:
+      command: "npm run web:build"
+      result: "passed"
+  - id: "M5"
+    title: "Final regression and documentation"
+    prompt: ".pipeline/prompts/04-final-regression-and-docs.md"
+    status: completed
+    current_step: review_code
+    steps:
+      write_tests: completed
+      review_tests: completed
+      run_tests_red: completed
+      implement: completed
+      run_tests_green: completed
+      review_code: completed
+    tests:
+      command: "npm test"
+      result: "27 passed"
+    check:
+      command: "npm run check && git diff --check"
+      result: "passed"
+  - id: "M6"
+    title: "Mobile instant bottom anchoring"
+    prompt: ".pipeline/prompts/05-mobile-instant-bottom-anchor.md"
+    status: pending
+    current_step: write_tests
+    steps:
+      write_tests: pending
+      review_tests: pending
+      run_tests_red: pending
+      implement: pending
+      run_tests_green: pending
+      review_code: pending
+  - id: "M7"
+    title: "Codex skill discovery API"
+    prompt: ".pipeline/prompts/06-skill-discovery-api.md"
+    status: pending
+    current_step: write_tests
+    steps:
+      write_tests: pending
+      review_tests: pending
+      run_tests_red: pending
+      implement: pending
+      run_tests_green: pending
+      review_code: pending
+  - id: "M8"
+    title: "Composer skill completion UI"
+    prompt: ".pipeline/prompts/07-composer-skill-completion-ui.md"
+    status: pending
+    current_step: write_tests
+    steps:
+      write_tests: pending
+      review_tests: pending
+      run_tests_red: pending
+      implement: pending
+      run_tests_green: pending
+      review_code: pending
+  - id: "M9"
+    title: "Final regression and documentation"
+    prompt: ".pipeline/prompts/08-final-regression-and-docs.md"
+    status: pending
+    current_step: write_tests
+    steps:
+      write_tests: pending
+      review_tests: pending
+      run_tests_red: pending
+      implement: pending
+      run_tests_green: pending
+      review_code: pending
+
+history:
+  completed_prompts: []
+  recent:
+    - timestamp: "2026-04-29T01:06:43+08:00"
+      milestone: "M1"
+      step: write_tests
+      status: running
+      summary: "开始执行 M1，进入 write_tests。"
+    - timestamp: "2026-04-29T01:07:22+08:00"
+      milestone: "M1"
+      step: write_tests
+      status: completed
+      summary: "新增 3 个后端安全路由测试。"
+    - timestamp: "2026-04-29T01:07:22+08:00"
+      milestone: "M1"
+      step: review_tests
+      status: completed
+      summary: "测试覆盖大请求体、匿名鉴权与登录后观测端点访问。"
+    - timestamp: "2026-04-29T01:08:09+08:00"
+      milestone: "M1"
+      step: run_tests_red
+      status: completed
+      summary: "新增测试红灯符合预期：2 个失败、1 个通过。"
+    - timestamp: "2026-04-29T01:12:55+08:00"
+      milestone: "M1"
+      step: run_tests_green
+      status: completed
+      summary: "npm test 通过：22 个测试全部通过。"
+    - timestamp: "2026-04-29T01:12:55+08:00"
+      milestone: "M1"
+      step: review_code
+      status: completed
+      summary: "代码审查通过，M1 完成。"
+    - timestamp: "2026-04-29T01:12:55+08:00"
+      milestone: "M2"
+      step: write_tests
+      status: running
+      summary: "开始执行 M2。"
+    - timestamp: "2026-04-29T01:14:16+08:00"
+      milestone: "M2"
+      step: write_tests
+      status: completed
+      summary: "新增 app-server bridge 生命周期测试。"
+    - timestamp: "2026-04-29T01:14:16+08:00"
+      milestone: "M2"
+      step: review_tests
+      status: completed
+      summary: "测试覆盖 shutdown 后重启状态复位与重启后异常退出报错。"
+    - timestamp: "2026-04-29T01:14:16+08:00"
+      milestone: "M2"
+      step: run_tests_red
+      status: completed
+      summary: "新增测试红灯符合预期：1 个失败、2 个通过。"
+    - timestamp: "2026-04-29T01:18:12+08:00"
+      milestone: "M2"
+      step: run_tests_green
+      status: completed
+      summary: "npm test 通过：23 个测试全部通过。"
+    - timestamp: "2026-04-29T01:18:12+08:00"
+      milestone: "M2"
+      step: review_code
+      status: completed
+      summary: "代码审查通过，M2 完成。"
+    - timestamp: "2026-04-29T01:18:12+08:00"
+      milestone: "M3"
+      step: write_tests
+      status: running
+      summary: "开始执行 M3。"
+    - timestamp: "2026-04-29T01:33:05+08:00"
+      milestone: "M3"
+      step: run_tests_green
+      status: completed
+      summary: "npm test 通过：27 个测试全部通过。"
+    - timestamp: "2026-04-29T01:33:05+08:00"
+      milestone: "M3"
+      step: review_code
+      status: completed
+      summary: "代码审查通过，M3 完成。"
+    - timestamp: "2026-04-29T01:33:05+08:00"
+      milestone: "M4"
+      step: write_tests
+      status: running
+      summary: "开始执行 M4。"
+    - timestamp: "2026-04-29T01:42:16+08:00"
+      milestone: "M4"
+      step: review_code
+      status: completed
+      summary: "维护报告 UI 完成，web:build 通过。"
+    - timestamp: "2026-04-29T01:42:16+08:00"
+      milestone: "M5"
+      step: run_tests_green
+      status: completed
+      summary: "最终回归通过：npm test、npm run check、git diff --check 全部通过。"
+    - timestamp: "2026-04-29T01:42:16+08:00"
+      milestone: "M5"
+      step: review_code
+      status: completed
+      summary: "README、README.zh-CN 与 architecture 已更新，流水线完成。"
+    - timestamp: "2026-04-29T21:05:51+08:00"
+      milestone: "M6-M9"
+      step: plan_generate
+      status: pending_confirmation
+      summary: "追加移动端瞬间底部定位与 `$` skill 补全计划，等待确认后执行。"

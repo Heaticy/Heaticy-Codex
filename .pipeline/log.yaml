@@ -1,0 +1,177 @@
+entries:
+  - id: "EXEC-020"
+    type: execution
+    ref: ".pipeline/prompts/04-final-regression-and-docs.md"
+    status: completed
+    timestamp: "2026-04-29T01:42:16+08:00"
+    summary: "M5 review_code 完成：文档与 architecture 更新完成，流水线结束。"
+    milestone: "M5"
+    step: "review_code"
+  - id: "EXEC-019"
+    type: execution
+    ref: ".pipeline/prompts/04-final-regression-and-docs.md"
+    status: completed
+    timestamp: "2026-04-29T01:42:16+08:00"
+    summary: "M5 run_tests_green 完成：npm test、npm run check、git diff --check 全部通过。"
+    milestone: "M5"
+    step: "run_tests_green"
+    command: "npm test && npm run check && git diff --check"
+  - id: "EXEC-018"
+    type: execution
+    ref: ".pipeline/prompts/03-maintenance-report-ui.md"
+    status: completed
+    timestamp: "2026-04-29T01:42:16+08:00"
+    summary: "M4 review_code 完成：维护报告 UI 接入完成，web:build 通过。"
+    milestone: "M4"
+    step: "review_code"
+  - id: "EXEC-017"
+    type: execution
+    ref: ".pipeline/prompts/03-maintenance-report-ui.md"
+    status: completed
+    timestamp: "2026-04-29T01:42:16+08:00"
+    summary: "M4 run_tests_green 完成：npm run web:build 通过。"
+    milestone: "M4"
+    step: "run_tests_green"
+    command: "npm run web:build"
+  - id: "EXEC-016"
+    type: execution
+    ref: ".pipeline/prompts/03-maintenance-report-ui.md"
+    status: running
+    timestamp: "2026-04-29T01:33:05+08:00"
+    summary: "开始执行 M4，当前步骤 write_tests。"
+    milestone: "M4"
+    step: "write_tests"
+  - id: "EXEC-015"
+    type: execution
+    ref: ".pipeline/prompts/02-history-cleanup-backend.md"
+    status: completed
+    timestamp: "2026-04-29T01:33:05+08:00"
+    summary: "M3 review_code 完成，代码审查通过。"
+    milestone: "M3"
+    step: "review_code"
+  - id: "EXEC-014"
+    type: execution
+    ref: ".pipeline/prompts/02-history-cleanup-backend.md"
+    status: completed
+    timestamp: "2026-04-29T01:33:05+08:00"
+    summary: "M3 run_tests_green 完成：npm test 27/27 通过，npm run check 通过。"
+    milestone: "M3"
+    step: "run_tests_green"
+    command: "npm test && npm run check"
+  - id: "EXEC-013"
+    type: execution
+    ref: ".pipeline/prompts/02-history-cleanup-backend.md"
+    status: running
+    timestamp: "2026-04-29T01:18:12+08:00"
+    summary: "开始执行 M3，当前步骤 write_tests。"
+    milestone: "M3"
+    step: "write_tests"
+  - id: "EXEC-012"
+    type: execution
+    ref: ".pipeline/prompts/01-app-server-restart-state.md"
+    status: completed
+    timestamp: "2026-04-29T01:18:12+08:00"
+    summary: "M2 review_code 完成，代码审查通过。"
+    milestone: "M2"
+    step: "review_code"
+  - id: "EXEC-011"
+    type: execution
+    ref: ".pipeline/prompts/01-app-server-restart-state.md"
+    status: completed
+    timestamp: "2026-04-29T01:18:12+08:00"
+    summary: "M2 run_tests_green 完成：npm test 23/23 通过，npm run check 通过。"
+    milestone: "M2"
+    step: "run_tests_green"
+    command: "npm test && npm run check"
+  - id: "EXEC-010"
+    type: execution
+    ref: "test/appServerBridge.test.js"
+    status: completed
+    timestamp: "2026-04-29T01:14:16+08:00"
+    summary: "M2 run_tests_red 完成：新增 bridge 测试 1 fail / runner 测试 2 pass。"
+    milestone: "M2"
+    step: "run_tests_red"
+    command: "node --test test/appServerBridge.test.js test/appServerRunner.test.js"
+  - id: "EXEC-009"
+    type: execution
+    ref: "test/appServerBridge.test.js"
+    status: completed
+    timestamp: "2026-04-29T01:14:16+08:00"
+    summary: "M2 review_tests 完成，覆盖 shutdown 后重启状态复位与异常退出报错。"
+    milestone: "M2"
+    step: "review_tests"
+  - id: "EXEC-008"
+    type: execution
+    ref: "test/appServerBridge.test.js"
+    status: completed
+    timestamp: "2026-04-29T01:14:16+08:00"
+    summary: "M2 write_tests 完成，新增 app-server bridge 生命周期测试。"
+    milestone: "M2"
+    step: "write_tests"
+  - id: "EXEC-007"
+    type: execution
+    ref: ".pipeline/prompts/01-app-server-restart-state.md"
+    status: running
+    timestamp: "2026-04-29T01:12:55+08:00"
+    summary: "开始执行 M2，当前步骤 write_tests。"
+    milestone: "M2"
+    step: "write_tests"
+  - id: "EXEC-006"
+    type: execution
+    ref: ".pipeline/prompts/00-request-limit-and-observability-auth.md"
+    status: completed
+    timestamp: "2026-04-29T01:12:55+08:00"
+    summary: "M1 review_code 完成，代码审查通过。"
+    milestone: "M1"
+    step: "review_code"
+  - id: "EXEC-005"
+    type: execution
+    ref: ".pipeline/prompts/00-request-limit-and-observability-auth.md"
+    status: completed
+    timestamp: "2026-04-29T01:12:55+08:00"
+    summary: "M1 run_tests_green 完成：npm test 22/22 通过，npm run check 通过。"
+    milestone: "M1"
+    step: "run_tests_green"
+    command: "npm test && npm run check"
+  - id: "EXEC-004"
+    type: execution
+    ref: "test/koaAppSecurity.test.js"
+    status: completed
+    timestamp: "2026-04-29T01:08:09+08:00"
+    summary: "M1 run_tests_red 完成：新增测试 2 fail / 1 pass，失败原因匹配预期。"
+    milestone: "M1"
+    step: "run_tests_red"
+    command: "node --test test/koaAppSecurity.test.js"
+  - id: "EXEC-003"
+    type: execution
+    ref: ".pipeline/prompts/00-request-limit-and-observability-auth.md"
+    status: running
+    timestamp: "2026-04-29T01:07:22+08:00"
+    summary: "M1 review_tests 完成，进入 run_tests_red。"
+    milestone: "M1"
+    step: "run_tests_red"
+  - id: "EXEC-002"
+    type: execution
+    ref: "test/koaAppSecurity.test.js"
+    status: completed
+    timestamp: "2026-04-29T01:07:22+08:00"
+    summary: "M1 write_tests 完成，新增 3 个测试。"
+    milestone: "M1"
+    step: "write_tests"
+  - id: "EXEC-001"
+    type: execution
+    ref: ".pipeline/prompts/00-request-limit-and-observability-auth.md"
+    status: running
+    timestamp: "2026-04-29T01:06:43+08:00"
+    summary: "开始执行 M1，当前步骤 write_tests。"
+    milestone: "M1"
+    step: "write_tests"
+    trigger: user
+  - id: "AUDIT-001"
+    type: audit
+    ref: ".pipeline/audits/audit-001.md"
+    status: warning
+    timestamp: "2026-04-29T00:01:08+08:00"
+    summary: "全项目预防性审计发现 0 个 Critical、5 个 Warning、2 个 Info。"
+    report: ".pipeline/audits/audit-001.md"
+    trigger: user

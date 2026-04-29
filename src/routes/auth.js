@@ -32,6 +32,9 @@ export async function handleAuthRoute(ctx, runtime) {
         }
       );
     } catch (err) {
+      if (err?.statusCode) {
+        throw err;
+      }
       runtime.json(ctx, 400, { error: err?.message || String(err) });
     }
     return true;

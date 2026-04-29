@@ -8,6 +8,7 @@ import Koa from "koa";
 import { handleAuthRoute } from "./routes/auth.js";
 import { handleConfigRoute } from "./routes/config.js";
 import { handleHistoryRoute } from "./routes/history.js";
+import { handleMaintenanceRoute } from "./routes/maintenance.js";
 import { handleSessionRoute } from "./routes/sessions.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -15,6 +16,13 @@ const __dirname = path.dirname(__filename);
 const publicDir = path.join(__dirname, "..", "public");
 const webDistDir = path.join(__dirname, "..", "web", "dist");
 const directoryBrowserLimit = 400;
+const requestBodyLimitBytes = 2_000_000;
+
+function createPayloadTooLargeError() {
+  const error = new Error("Payload Too Large");
+  error.statusCode = 413;
+  return error;
+}
 
 export function createKoaApp({ config, sessionManager }) {
   const runtime = {
@@ -46,15 +54,45 @@ export function createKoaApp({ config, sessionManager }) {
   };
   runtime.readBody = (req) =>
     new Promise((resolve, reject) => {
-      let body = "";
-      req.on("data", (chunk) => {
-        body += chunk;
-        if (body.length > 2_000_000) {
-          reject(new Error("Request body too large."));
+      const chunks = [];
+      let size = 0;
+      let settled = false;
+
+      const rejectTooLarge = () => {
+        if (settled) {
+          return;
         }
+        settled = true;
+        chunks.length = 0;
+        reject(createPayloadTooLargeError());
+        req.resume();
+      };
+
+      req.on("data", (chunk) => {
+        if (settled) {
+          return;
+        }
+        size += chunk.length;
+        if (size > requestBodyLimitBytes) {
+          rejectTooLarge();
+          return;
+        }
+        chunks.push(chunk);
       });
-      req.on("end", () => resolve(body));
-      req.on("error", reject);
+      req.on("end", () => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        resolve(Buffer.concat(chunks, size).toString("utf8"));
+      });
+      req.on("error", (err) => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        reject(err);
+      });
     });
   runtime.parseCookies = (req) => {
     const raw = String(req.headers.cookie || "");
@@ -496,7 +534,9 @@ export function createKoaApp({ config, sessionManager }) {
       if (ctx.headerSent) {
         throw err;
       }
-      runtime.json(ctx, 500, { error: err?.message || String(err) });
+      const statusCode = Number.isInteger(err?.statusCode) ? err.statusCode : 500;
+      const message = statusCode === 413 ? "Payload Too Large" : err?.message || String(err);
+      runtime.json(ctx, statusCode, { error: message });
     }
   });
 
@@ -531,7 +571,7 @@ export function createKoaApp({ config, sessionManager }) {
       return;
     }
 
-    const handled = [handleAuthRoute, handleConfigRoute, handleHistoryRoute, handleSessionRoute];
+    const handled = [handleAuthRoute, handleConfigRoute, handleHistoryRoute, handleMaintenanceRoute, handleSessionRoute];
     for (const route of handled) {
       if (await route(ctx, runtime)) {
         return;

@@ -22,9 +22,25 @@ Persistent allow rules live in `~/.heaticy-codex/approvals.json`. Audit records 
 
 ## Operations
 
+- `GET /api/health` stays public for lightweight probes.
 - `GET /api/healthz` returns bridge readiness, active runner count, and last error time.
 - `GET /api/metrics` exposes Prometheus text metrics such as active sessions, Codex turn totals, and approval decisions.
+- `GET /api/healthz` and `GET /api/metrics` now require an authenticated web session.
+- Historical transcript cleanup runs automatically with a default retention of 30 days, or 7 days for low-information sessions.
+- The session list now includes a maintenance strip that shows the latest cleanup report and can trigger manual cleanup after login.
 - PM2 config restarts daily at 04:00 and restarts the process if memory exceeds 1G.
+
+### History Cleanup Configuration
+
+Set these environment variables in `.env` when you need different retention behavior:
+
+- `HISTORY_RETENTION_DAYS` default `30`
+- `HISTORY_SIMPLE_RETENTION_DAYS` default `7`
+- `HISTORY_SIMPLE_MAX_MESSAGES` default `4`
+- `HISTORY_SIMPLE_MAX_CHARS` default `1000`
+- `HISTORY_CLEANUP_INTERVAL_HOURS` default `24`
+
+Simple sessions are cleaned earlier when they contain fewer than 4 messages or less than about 1000 characters of text.
 
 ## Screenshots
 

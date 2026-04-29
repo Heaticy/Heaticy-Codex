@@ -1,0 +1,52 @@
+project:
+  name: "heaticy-codex"
+  type: "node-koa-vue-web-terminal"
+  preset: "tdd"
+
+output:
+  language: "zh-CN"
+  timezone: "Asia/Shanghai"
+
+plan:
+  mode: "interactive"
+  interaction_depth: "medium"
+  interactive:
+    require_explicit_confirm: true
+    min_rounds: 3
+
+execution:
+  mode: "serial"
+  test_command: "npm test"
+  check_command: "npm run check"
+
+current:
+  phase: "plan_confirm"
+
+milestones:
+  - id: "M1"
+    prompt: ".pipeline/prompts/00-request-limit-and-observability-auth.md"
+    title: "Request limit and observability auth"
+  - id: "M2"
+    prompt: ".pipeline/prompts/01-app-server-restart-state.md"
+    title: "App-server restart state fix"
+  - id: "M3"
+    prompt: ".pipeline/prompts/02-history-cleanup-backend.md"
+    title: "History cleanup backend"
+  - id: "M4"
+    prompt: ".pipeline/prompts/03-maintenance-report-ui.md"
+    title: "Maintenance report UI"
+  - id: "M5"
+    prompt: ".pipeline/prompts/04-final-regression-and-docs.md"
+    title: "Final regression and documentation"
+  - id: "M6"
+    prompt: ".pipeline/prompts/05-mobile-instant-bottom-anchor.md"
+    title: "Mobile instant bottom anchoring"
+  - id: "M7"
+    prompt: ".pipeline/prompts/06-skill-discovery-api.md"
+    title: "Codex skill discovery API"
+  - id: "M8"
+    prompt: ".pipeline/prompts/07-composer-skill-completion-ui.md"
+    title: "Composer skill completion UI"
+  - id: "M9"
+    prompt: ".pipeline/prompts/08-final-regression-and-docs.md"
+    title: "Final regression and documentation"

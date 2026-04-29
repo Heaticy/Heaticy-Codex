@@ -5,7 +5,13 @@ import { useRoute, useRouter } from "vue-router";
 import ChatView from "./components/ChatView.vue";
 import LoginView from "./components/LoginView.vue";
 import SessionListView from "./components/SessionListView.vue";
-import { request, requestHistoryMessages, requestSessionById } from "./lib/api.js";
+import {
+  request,
+  requestHistoryMessages,
+  requestMaintenanceReport,
+  requestSessionById,
+  runMaintenanceCleanup
+} from "./lib/api.js";
 import { normalizeServerPayload } from "./lib/normalize-events.js";
 import {
   PREVIEW_FALLBACK,
@@ -75,6 +81,10 @@ const state = reactive({
   sessions: [],
   projects: [],
   codexThreads: [],
+  maintenanceReport: null,
+  maintenanceLoading: false,
+  maintenanceCleanupPending: false,
+  maintenanceError: "",
   activeSessionId: "",
   activeLiveSessionId: "",
   activeSessionMeta: null,
@@ -905,6 +915,7 @@ async function refreshSessions() {
   }
   state.sessions = sessions;
   state.projects = projectsPayload.projects || [];
+  await fetchMaintenanceReport({ silent: true });
 }
 
 function toWsProtocol(proto) {
@@ -920,7 +931,9 @@ async function bootstrapWorkspace({ includeSessions = true } = {}) {
   await loadRuntimeConfig();
   if (includeSessions) {
     await refreshSessions();
+    return;
   }
+  await fetchMaintenanceReport({ silent: true });
 }
 
 async function loadRuntimeConfig() {
@@ -937,6 +950,37 @@ async function loadRuntimeConfig() {
     state.selectedReasoningEffort = String(provider.defaultReasoningEffort || provider.reasoningEfforts?.[2] || "").trim();
   }
   return config;
+}
+
+async function fetchMaintenanceReport({ silent = false } = {}) {
+  try {
+    state.maintenanceLoading = true;
+    const payload = await requestMaintenanceReport();
+    state.maintenanceReport = payload?.report || null;
+    state.maintenanceError = "";
+    return state.maintenanceReport;
+  } catch (error) {
+    if (!silent) {
+      state.maintenanceError = error?.message || String(error);
+    }
+    return state.maintenanceReport;
+  } finally {
+    state.maintenanceLoading = false;
+  }
+}
+
+async function handleMaintenanceCleanup() {
+  try {
+    state.maintenanceCleanupPending = true;
+    const payload = await runMaintenanceCleanup();
+    state.maintenanceReport = payload?.report || state.maintenanceReport;
+    state.maintenanceError = "";
+    await refreshSessions();
+  } catch (error) {
+    state.maintenanceError = error?.message || String(error);
+  } finally {
+    state.maintenanceCleanupPending = false;
+  }
 }
 
 async function handleLogin({ silent = false, auto = false } = {}) {
@@ -1951,11 +1995,16 @@ if (typeof window !== 'undefined') {
             :groups="workbenchGroups"
             :active-session-id="state.activeSessionId"
             :pending-session-id="state.pendingSessionId"
+            :maintenance-report="state.maintenanceReport"
+            :maintenance-loading="state.maintenanceLoading"
+            :maintenance-cleanup-pending="state.maintenanceCleanupPending"
+            :maintenance-error="state.maintenanceError"
             :format-relative-time="formatRelativeTime"
             @open="openSessionItem"
             @create-group-session="createSessionInGroup"
             @delete-session="deleteSessionItem"
             @open-codex-threads="openCodexThreadPicker"
+            @run-maintenance-cleanup="handleMaintenanceCleanup"
           />
         </aside>
 
@@ -1977,11 +2026,16 @@ if (typeof window !== 'undefined') {
               :groups="workbenchGroups"
               :active-session-id="state.activeSessionId"
               :pending-session-id="state.pendingSessionId"
+              :maintenance-report="state.maintenanceReport"
+              :maintenance-loading="state.maintenanceLoading"
+              :maintenance-cleanup-pending="state.maintenanceCleanupPending"
+              :maintenance-error="state.maintenanceError"
               :format-relative-time="formatRelativeTime"
               @open="openSessionItem"
               @create-group-session="createSessionInGroup"
               @delete-session="deleteSessionItem"
               @open-codex-threads="openCodexThreadPicker"
+              @run-maintenance-cleanup="handleMaintenanceCleanup"
             />
           </section>
 

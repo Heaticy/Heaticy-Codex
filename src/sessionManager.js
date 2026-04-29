@@ -59,6 +59,15 @@ function formatShortTimestamp(value, timezone) {
   return `${get("month")}-${get("day")} ${get("hour")}:${get("minute")} ${get("timeZoneName")}`;
 }
 
+function clampPositiveInteger(value, fallback) {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function historyRetentionMs(days, fallbackDays) {
+  return clampPositiveInteger(days, fallbackDays) * 24 * 60 * 60 * 1000;
+}
+
 function quotePosix(value) {
   return `'${String(value || "").replace(/'/g, "'\\''")}'`;
 }
@@ -1105,6 +1114,10 @@ function appendHistoricalMessage(messages, candidate) {
   });
 }
 
+function historicalTextCharCount(messages) {
+  return (messages || []).reduce((total, message) => total + String(message?.text || "").trim().length, 0);
+}
+
 function findFirstRealUserMessage(messages) {
   for (const message of messages) {
     if (message.role !== "user") {
@@ -1625,10 +1638,21 @@ export class SessionManager {
         .map(([key, value]) => [normalizeCustomNameKey(key), String(value || "").trim()])
         .filter((entry) => entry[0] && entry[1])
     );
+    this.maintenanceReport = {
+      historyCleanup: {
+        lastRunAt: "",
+        lastTrigger: "",
+        lastSummary: null,
+        warnings: []
+      }
+    };
+    this.historyCleanupTimer = null;
+    this.startupCleanupTimer = null;
     fs.mkdirSync(this.config.dataDir, { recursive: true });
     fs.mkdirSync(this.config.heaticyDataDir, { recursive: true });
     this.maintenanceTimer = setInterval(() => this.runSessionMaintenance(), 5_000);
     this.maintenanceTimer.unref?.();
+    this.scheduleHistoricalCleanup();
     if (this.appServerBridge) {
       this.appServerBridge.on("notification", (msg) => this.handleAppServerNotification(msg));
       this.appServerBridge.on("log", (line) => {
@@ -2767,6 +2791,152 @@ export class SessionManager {
     }
   }
 
+  scheduleHistoricalCleanup() {
+    const intervalMs = Math.max(1, clampPositiveInteger(this.config.historyCleanupIntervalHours, 24)) * 60 * 60 * 1000;
+    this.historyCleanupTimer = setInterval(() => {
+      try {
+        this.runHistoricalCleanup({ trigger: "scheduled" });
+      } catch (error) {
+        this.recordHistoryCleanupWarning({
+          providerId: "",
+          resumeSessionId: "",
+          filePath: "",
+          error
+        });
+      }
+    }, intervalMs);
+    this.historyCleanupTimer.unref?.();
+
+    this.startupCleanupTimer = setTimeout(() => {
+      try {
+        this.runHistoricalCleanup({ trigger: "startup" });
+      } catch (error) {
+        this.recordHistoryCleanupWarning({
+          providerId: "",
+          resumeSessionId: "",
+          filePath: "",
+          error
+        });
+      }
+    }, 5_000);
+    this.startupCleanupTimer.unref?.();
+  }
+
+  recordHistoryCleanupWarning({ providerId = "", resumeSessionId = "", filePath = "", error }) {
+    const entry = {
+      timestamp: nowIso(),
+      providerId: String(providerId || "").trim(),
+      resumeSessionId: String(resumeSessionId || "").trim(),
+      filePath: String(filePath || "").trim(),
+      error: error?.message || String(error)
+    };
+    boundedPush(this.maintenanceReport.historyCleanup.warnings, entry, 50);
+    return entry;
+  }
+
+  getMaintenanceReport() {
+    return {
+      historyCleanup: {
+        lastRunAt: this.maintenanceReport.historyCleanup.lastRunAt,
+        lastTrigger: this.maintenanceReport.historyCleanup.lastTrigger,
+        lastSummary: this.maintenanceReport.historyCleanup.lastSummary
+          ? { ...this.maintenanceReport.historyCleanup.lastSummary }
+          : null,
+        warnings: this.maintenanceReport.historyCleanup.warnings.map((warning) => ({ ...warning }))
+      }
+    };
+  }
+
+  isHistoricalSessionActive(providerId, resumeSessionId) {
+    const targetProvider = String(providerId || "").trim();
+    const targetResumeId = String(resumeSessionId || "").trim();
+    if (!targetProvider || !targetResumeId) {
+      return false;
+    }
+
+    return [...this.sessions.values()].some((session) => {
+      return (
+        session.provider === targetProvider &&
+        session.status !== "exited" &&
+        session.lifecycle !== "closed" &&
+        String(session.resumeSessionId || "").trim() === targetResumeId
+      );
+    });
+  }
+
+  runHistoricalCleanup({ trigger = "manual" } = {}) {
+    const now = Date.now();
+    const retentionMs = historyRetentionMs(this.config.historyRetentionDays, 30);
+    const simpleRetentionMs = historyRetentionMs(this.config.historySimpleRetentionDays, 7);
+    const deletedSessions = [];
+    let scannedCount = 0;
+    let deletedCount = 0;
+    let failedCount = 0;
+    let retainedCount = 0;
+    let activeCount = 0;
+
+    for (const provider of this.providers.values()) {
+      const groups = this.groupHistoricalSessionsForProvider(provider);
+      for (const group of groups) {
+        scannedCount += 1;
+
+        if (this.isHistoricalSessionActive(provider.id, group.session.resumeSessionId)) {
+          activeCount += 1;
+          retainedCount += 1;
+          continue;
+        }
+
+        const sessionUpdatedAtMs = Date.parse(String(group.session.updatedAt || ""));
+        if (!Number.isFinite(sessionUpdatedAtMs)) {
+          retainedCount += 1;
+          continue;
+        }
+
+        const maxAgeMs = group.metrics.isSimple ? simpleRetentionMs : retentionMs;
+        if (now - sessionUpdatedAtMs <= maxAgeMs) {
+          retainedCount += 1;
+          continue;
+        }
+
+        try {
+          this.deleteHistoricalEntries(provider.id, group.session.resumeSessionId, group.entries);
+          deletedCount += 1;
+          deletedSessions.push({
+            provider: provider.id,
+            resumeSessionId: group.session.resumeSessionId,
+            updatedAt: group.session.updatedAt,
+            simple: group.metrics.isSimple
+          });
+        } catch (error) {
+          failedCount += 1;
+          retainedCount += 1;
+          this.recordHistoryCleanupWarning({
+            providerId: provider.id,
+            resumeSessionId: group.session.resumeSessionId,
+            filePath: group.entries[0]?.filePath || "",
+            error
+          });
+        }
+      }
+    }
+
+    const summary = {
+      trigger: String(trigger || "manual"),
+      startedAt: new Date(now).toISOString(),
+      finishedAt: nowIso(),
+      scannedCount,
+      retainedCount,
+      activeCount,
+      deletedCount,
+      failedCount,
+      deletedSessions
+    };
+    this.maintenanceReport.historyCleanup.lastRunAt = summary.finishedAt;
+    this.maintenanceReport.historyCleanup.lastTrigger = summary.trigger;
+    this.maintenanceReport.historyCleanup.lastSummary = summary;
+    return this.getMaintenanceReport();
+  }
+
   listProjects() {
     return this.projectStore.list();
   }
@@ -2848,6 +3018,14 @@ export class SessionManager {
       clearInterval(this.maintenanceTimer);
       this.maintenanceTimer = null;
     }
+    if (this.historyCleanupTimer) {
+      clearInterval(this.historyCleanupTimer);
+      this.historyCleanupTimer = null;
+    }
+    if (this.startupCleanupTimer) {
+      clearTimeout(this.startupCleanupTimer);
+      this.startupCleanupTimer = null;
+    }
     for (const session of [...this.sessions.values()]) {
       try {
         if (session.runnerMode === "json_exec" || session.runnerMode === "app_server") {
@@ -2922,22 +3100,45 @@ export class SessionManager {
   }
 
   listHistoricalSessionsForProvider(provider, { archived = null } = {}) {
-    const byResumeId = new Map();
+    return this.groupHistoricalSessionsForProvider(provider, { archived }).map((group) => group.session);
+  }
 
-    for (const entry of this.scanHistoricalSessionsForProvider(provider)) {
+  groupHistoricalSessionsForProvider(provider, { archived = null, entries = null } = {}) {
+    const groups = new Map();
+    for (const entry of entries || this.scanHistoricalSessionsForProvider(provider)) {
       const isArchived = this.isArchived(provider.id, entry.resumeSessionId);
       if (archived !== null && isArchived !== archived) {
         continue;
       }
 
       const session = this.buildHistoricalSession(provider, entry, isArchived ? "archived" : "history");
-      const existing = byResumeId.get(entry.resumeSessionId);
-      if (!existing || existing.updatedAt < session.updatedAt) {
-        byResumeId.set(entry.resumeSessionId, session);
+      const metrics = {
+        messageCount: (entry.messages || []).length,
+        textChars: historicalTextCharCount(entry.messages || []),
+        isSimple: false
+      };
+      metrics.isSimple =
+        metrics.messageCount < clampPositiveInteger(this.config.historySimpleMaxMessages, 4) ||
+        metrics.textChars < clampPositiveInteger(this.config.historySimpleMaxChars, 1000);
+
+      const existing = groups.get(entry.resumeSessionId);
+      if (!existing) {
+        groups.set(entry.resumeSessionId, {
+          session,
+          entries: [entry],
+          metrics
+        });
+        continue;
+      }
+
+      existing.entries.push(entry);
+      if (existing.session.updatedAt < session.updatedAt) {
+        existing.session = session;
+        existing.metrics = metrics;
       }
     }
 
-    return [...byResumeId.values()].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+    return [...groups.values()].sort((left, right) => String(right.session.updatedAt).localeCompare(String(left.session.updatedAt)));
   }
 
   scanHistoricalSessionsForProvider(provider) {
@@ -3206,6 +3407,14 @@ export class SessionManager {
     const targetId = String(resumeSessionId || "").trim();
     const entries = this.scanHistoricalSessionsForProvider(provider).filter((entry) => entry.resumeSessionId === targetId);
     if (!entries.length) {
+      throw new Error(`Historical session not found: ${providerId}/${resumeSessionId}`);
+    }
+
+    return this.deleteHistoricalEntries(provider.id, targetId, entries);
+  }
+
+  deleteHistoricalEntries(providerId, resumeSessionId, entries) {
+    if (!Array.isArray(entries) || entries.length === 0) {
       throw new Error(`Historical session not found: ${providerId}/${resumeSessionId}`);
     }
 

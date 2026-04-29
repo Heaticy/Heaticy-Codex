@@ -95,3 +95,13 @@ export async function requestSessionById(sessionId) {
   const payload = await request(`/api/sessions/${encodeURIComponent(id)}`);
   return payload?.session || null;
 }
+
+export async function requestMaintenanceReport() {
+  return request("/api/maintenance/report");
+}
+
+export async function runMaintenanceCleanup() {
+  return request("/api/maintenance/cleanup", {
+    method: "POST"
+  });
+}

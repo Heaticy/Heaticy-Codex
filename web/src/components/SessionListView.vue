@@ -1,20 +1,40 @@
 <script setup>
-import { onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 
 const props = defineProps({
   groups: { type: Array, default: () => [] },
   activeSessionId: { type: String, default: "" },
   pendingSessionId: { type: String, default: "" },
+  maintenanceReport: { type: Object, default: null },
+  maintenanceLoading: { type: Boolean, default: false },
+  maintenanceCleanupPending: { type: Boolean, default: false },
+  maintenanceError: { type: String, default: "" },
   formatRelativeTime: { type: Function, required: true }
 });
 
-const emit = defineEmits(["open", "create-group-session", "delete-session", "open-codex-threads"]);
+const emit = defineEmits(["open", "create-group-session", "delete-session", "open-codex-threads", "run-maintenance-cleanup"]);
 const expandedGroups = ref(new Set());
 const openMenuGroupName = ref("");
 const openMenuPoint = ref({ x: 0, y: 0 });
 const longPressTimer = ref(null);
 const longPressGroupName = ref("");
 const suppressToggleUntil = ref(0);
+const historyCleanup = computed(() => props.maintenanceReport?.historyCleanup || null);
+const maintenanceSummary = computed(() => historyCleanup.value?.lastSummary || null);
+const maintenanceWarnings = computed(() => historyCleanup.value?.warnings || []);
+const latestMaintenanceWarning = computed(() => {
+  const warnings = maintenanceWarnings.value;
+  return warnings.length ? warnings[warnings.length - 1] : null;
+});
+const maintenanceButtonLabel = computed(() => {
+  if (props.maintenanceCleanupPending) {
+    return "清理中…";
+  }
+  if (props.maintenanceLoading && !maintenanceSummary.value) {
+    return "同步中…";
+  }
+  return "立即清理";
+});
 
 function buildInitialExpandedSet(groups, activeSessionId) {
   const next = new Set();
@@ -134,6 +154,34 @@ function menuStyle() {
   };
 }
 
+function maintenanceTimeLabel() {
+  if (maintenanceSummary.value?.finishedAt) {
+    return props.formatRelativeTime(maintenanceSummary.value.finishedAt);
+  }
+  if (historyCleanup.value?.lastRunAt) {
+    return props.formatRelativeTime(historyCleanup.value.lastRunAt);
+  }
+  return "从未运行";
+}
+
+function maintenanceWarningLabel() {
+  if (props.maintenanceError) {
+    return props.maintenanceError;
+  }
+  if (latestMaintenanceWarning.value) {
+    const warning = latestMaintenanceWarning.value;
+    const target = String(warning.resumeSessionId || "").trim();
+    return target ? `${target} · ${warning.error}` : warning.error;
+  }
+  if (maintenanceSummary.value) {
+    return maintenanceSummary.value.failedCount > 0 ? "最近一次清理包含失败项。" : "最近一次清理已完成。";
+  }
+  if (props.maintenanceLoading) {
+    return "正在拉取维护报告。";
+  }
+  return "尚未运行清理。";
+}
+
 if (typeof window !== "undefined") {
   window.addEventListener("pointerdown", onGlobalPointerDown, true);
 }
@@ -151,6 +199,39 @@ onBeforeUnmount(() => {
     <button class="local-thread-button" type="button" @click="emit('open-codex-threads')">
       打开本机 Codex 会话
     </button>
+    <section class="maintenance-strip" aria-label="维护报告">
+      <div class="maintenance-copy">
+        <div class="maintenance-row">
+          <strong>维护状态</strong>
+          <time>{{ maintenanceTimeLabel() }}</time>
+        </div>
+        <div class="maintenance-metrics">
+          <span>
+            <strong>{{ maintenanceSummary?.deletedCount ?? 0 }}</strong>
+            <small>已删</small>
+          </span>
+          <span>
+            <strong>{{ maintenanceSummary?.failedCount ?? 0 }}</strong>
+            <small>失败</small>
+          </span>
+          <span>
+            <strong>{{ maintenanceWarnings.length }}</strong>
+            <small>告警</small>
+          </span>
+        </div>
+        <p class="maintenance-detail" :class="{ error: maintenanceError || maintenanceSummary?.failedCount > 0 }">
+          {{ maintenanceWarningLabel() }}
+        </p>
+      </div>
+      <button
+        class="maintenance-action"
+        type="button"
+        :disabled="maintenanceCleanupPending || maintenanceLoading"
+        @click="emit('run-maintenance-cleanup')"
+      >
+        {{ maintenanceButtonLabel }}
+      </button>
+    </section>
     <section v-if="groups.length" class="session-groups">
       <section v-for="group in groups" :key="group.name" class="session-group">
         <button
@@ -243,6 +324,92 @@ onBeforeUnmount(() => {
   font-weight: 700;
 }
 
+.maintenance-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 13px;
+  border: 1px solid rgba(125, 185, 255, 0.2);
+  border-radius: 12px;
+  background: rgba(9, 21, 41, 0.92);
+}
+
+.maintenance-copy {
+  min-width: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.maintenance-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.maintenance-row strong {
+  font-size: 13px;
+  color: #eef6ff;
+}
+
+.maintenance-row time {
+  color: #a9bdd5;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.maintenance-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.maintenance-metrics span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+.maintenance-metrics strong {
+  font-size: 15px;
+  color: #f5fbff;
+}
+
+.maintenance-metrics small {
+  color: #89a4c2;
+  font-size: 11px;
+}
+
+.maintenance-detail {
+  margin: 0;
+  color: #b8c9dd;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.maintenance-detail.error {
+  color: #ffb4c0;
+}
+
+.maintenance-action {
+  min-height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(94, 234, 212, 0.24);
+  border-radius: 999px;
+  background: rgba(20, 184, 166, 0.08);
+  color: #ccfbf1;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.maintenance-action:disabled {
+  opacity: 0.58;
+}
+
 .session-group {
   position: relative;
   overflow: visible;
@@ -250,6 +417,16 @@ onBeforeUnmount(() => {
   border-radius: 12px;
   background: #0a1628;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+@media (max-width: 560px) {
+  .maintenance-strip {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .maintenance-action {
+    width: 100%;
+  }
 }
 
 .group-action-popover {

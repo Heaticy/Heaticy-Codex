@@ -21,6 +21,8 @@ export class AppServerBridge extends EventEmitter {
     this.pending = new Map();
     this.connecting = null;
     this.shuttingDown = false;
+    this.expectedExitProcesses = new WeakSet();
+    this.expectedCloseWebSockets = new WeakSet();
     this.stdoutBuffer = "";
     this.stderrBuffer = "";
 
@@ -74,12 +76,14 @@ export class AppServerBridge extends EventEmitter {
     const args = this.transport === "ws" ? ["app-server", "--listen", this.listenUrl] : ["app-server"];
     this.stdoutBuffer = "";
     this.stderrBuffer = "";
+    this.shuttingDown = false;
     this.proc = spawn(this.config.codexBin, args, {
       cwd: this.config.root,
       env: process.env,
       stdio: this.transport === "ws" ? ["ignore", "pipe", "pipe"] : ["pipe", "pipe", "pipe"]
     });
-    this.proc.stdout?.on("data", (chunk) => {
+    const proc = this.proc;
+    proc.stdout?.on("data", (chunk) => {
       if (this.transport === "stdio") {
         this.handleStdoutData(chunk);
         return;
@@ -89,28 +93,33 @@ export class AppServerBridge extends EventEmitter {
         this.emit("log", line);
       }
     });
-    this.proc.stderr?.on("data", (chunk) => {
+    proc.stderr?.on("data", (chunk) => {
       const line = String(chunk || "").trim();
       this.stderrBuffer = `${this.stderrBuffer}${String(chunk || "")}`.slice(-10_000);
       if (line) {
         this.emit("log", line);
       }
     });
-    this.proc.on("error", (error) => {
+    proc.on("error", (error) => {
+      const expectedExit = this.expectedExitProcesses.has(proc);
       this.connected = false;
       this.initialized = false;
       this.ws = null;
       this.rejectPending(error);
-      this.emit("error", error);
+      if (!expectedExit) {
+        this.emit("error", error);
+      }
     });
-    this.proc.on("exit", (code, signal) => {
+    proc.on("exit", (code, signal) => {
+      const expectedExit = this.expectedExitProcesses.has(proc);
+      this.expectedExitProcesses.delete(proc);
       this.connected = false;
       this.initialized = false;
       this.ws = null;
       const detail = this.stderrBuffer.trim() ? `: ${this.stderrBuffer.trim().slice(-500)}` : "";
       const error = new Error(`codex app-server exited code=${code ?? "null"} signal=${signal ?? "null"}${detail}`);
       this.rejectPending(error);
-      if (!this.shuttingDown) {
+      if (!expectedExit && !this.shuttingDown) {
         this.emit("error", error);
       }
     });
@@ -123,24 +132,27 @@ export class AppServerBridge extends EventEmitter {
   async openWebSocket() {
     const url = this.listenUrl;
     this.ws = new WebSocket(url);
+    const ws = this.ws;
     const connectTimeoutMs = Math.max(1_000, Number(this.config.codexAppServerConnectTimeoutMs) || 5_000);
     await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("app-server websocket connect timeout")), connectTimeoutMs);
-      this.ws.once("open", () => {
+      ws.once("open", () => {
         clearTimeout(timer);
         resolve();
       });
-      this.ws.once("error", (err) => {
+      ws.once("error", (err) => {
         clearTimeout(timer);
         reject(err);
       });
     });
     this.connected = true;
-    this.ws.on("message", (raw) => this.handleMessage(raw));
-    this.ws.on("close", () => {
+    ws.on("message", (raw) => this.handleMessage(raw));
+    ws.on("close", () => {
+      const expectedClose = this.expectedCloseWebSockets.has(ws);
+      this.expectedCloseWebSockets.delete(ws);
       this.connected = false;
       this.initialized = false;
-      if (!this.shuttingDown) {
+      if (!expectedClose && !this.shuttingDown) {
         const error = new Error("app-server websocket closed");
         this.rejectPending(error);
         this.emit("error", error);
@@ -357,6 +369,12 @@ export class AppServerBridge extends EventEmitter {
 
   async shutdown() {
     this.shuttingDown = true;
+    if (this.proc) {
+      this.expectedExitProcesses.add(this.proc);
+    }
+    if (this.ws) {
+      this.expectedCloseWebSockets.add(this.ws);
+    }
     try {
       this.ws?.close();
     } catch {

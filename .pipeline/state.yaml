@@ -9,7 +9,7 @@ pipeline:
 last_heartbeat: "2026-04-29T21:05:51+08:00"
 
 current:
-  phase: plan_confirm
+  phase: lifecycle_debug
   prompt_index: 5
   prompt_file: ".pipeline/prompts/05-mobile-instant-bottom-anchor.md"
   prompt_name: "M6 — Mobile instant bottom anchoring"

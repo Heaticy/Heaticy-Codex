@@ -37,8 +37,11 @@ const viewportHeight = ref(0);
 const keyboardInset = ref(0);
 const isPinnedToBottom = ref(true);
 const isTouchDevice = ref(false);
+const isMessageStreamAnchoring = ref(true);
 const showProcessDetails = ref(false);
 const lightboxImage = ref(null);
+let bottomAnchorRun = 0;
+let programmaticScroll = false;
 
 const chatShellStyle = computed(() => ({
   "--chat-vh": viewportHeight.value ? `${viewportHeight.value}px` : undefined,
@@ -413,8 +416,17 @@ function scrollToBottom(force = false) {
     }
 
     const applyScroll = () => {
-      el.scrollTop = el.scrollHeight;
+      const hasWindow = typeof window !== "undefined";
+      programmaticScroll = true;
+      el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
       isPinnedToBottom.value = true;
+      if (hasWindow) {
+        window.setTimeout(() => {
+          programmaticScroll = false;
+        }, 0);
+      } else {
+        programmaticScroll = false;
+      }
     };
 
     applyScroll();
@@ -423,6 +435,70 @@ function scrollToBottom(force = false) {
         window.requestAnimationFrame(applyScroll);
       });
     }
+  });
+}
+
+function anchorSessionToBottom() {
+  const run = (bottomAnchorRun += 1);
+  const hideUntilAnchored = isTouchDevice.value;
+  if (hideUntilAnchored) {
+    isMessageStreamAnchoring.value = true;
+  }
+
+  nextTick(() => {
+    const el = messageListEl.value;
+    if (!el || run !== bottomAnchorRun) {
+      return;
+    }
+
+    const previousScrollBehavior = el.style.scrollBehavior;
+    const hasWindow = typeof window !== "undefined";
+    el.style.scrollBehavior = "auto";
+    el.classList.add("instant-scroll-anchor");
+    programmaticScroll = true;
+
+    let lastScrollHeight = -1;
+    let stableFrames = 0;
+    let frameCount = 0;
+
+    const finish = () => {
+      if (run !== bottomAnchorRun) {
+        return;
+      }
+      el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
+      el.style.scrollBehavior = previousScrollBehavior;
+      el.classList.remove("instant-scroll-anchor");
+      isPinnedToBottom.value = true;
+      isMessageStreamAnchoring.value = false;
+      if (hasWindow) {
+        window.setTimeout(() => {
+          if (run === bottomAnchorRun) {
+            programmaticScroll = false;
+          }
+        }, 0);
+      } else {
+        programmaticScroll = false;
+      }
+    };
+
+    const step = () => {
+      if (run !== bottomAnchorRun) {
+        return;
+      }
+      el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight);
+      const height = el.scrollHeight;
+      stableFrames = height === lastScrollHeight ? stableFrames + 1 : 0;
+      lastScrollHeight = height;
+      frameCount += 1;
+
+      if (stableFrames >= 2 || frameCount >= 10 || !hasWindow || typeof window.requestAnimationFrame !== "function") {
+        finish();
+        return;
+      }
+      window.requestAnimationFrame(step);
+    };
+
+    step();
   });
 }
 
@@ -488,6 +564,9 @@ function handleMarkdownBodyClick(event) {
 }
 
 function handleStreamScroll(event) {
+  if (programmaticScroll) {
+    return;
+  }
   isPinnedToBottom.value = isNearBottom(event.target);
 }
 
@@ -544,7 +623,7 @@ watch(
   () => `${props.sessionKey}::${props.openToken}`,
   () => {
     isPinnedToBottom.value = true;
-    scrollToBottom(true);
+    anchorSessionToBottom();
   },
   { flush: "post", immediate: true }
 );
@@ -568,7 +647,7 @@ onMounted(() => {
     window.visualViewport?.addEventListener("scroll", handleViewportChange, { passive: true });
   }
   syncViewportMetrics();
-  scrollToBottom(true);
+  anchorSessionToBottom();
   resizeComposer(composerEl.value, { keepBottom: true });
 });
 
@@ -611,7 +690,12 @@ onBeforeUnmount(() => {
         @restart="emit('restart-runner')"
       />
       <div v-if="activeActivity" class="activity-strip">{{ activeActivity }}</div>
-      <section ref="messageListEl" class="message-stream" @scroll="handleStreamScroll">
+      <section
+        ref="messageListEl"
+        class="message-stream"
+        :class="{ 'message-stream-anchoring': isMessageStreamAnchoring }"
+        @scroll="handleStreamScroll"
+      >
         <article v-for="item in renderedTimelineItems" :key="item.id" class="message-item" :class="item.role">
           <template v-if="item.type === 'message'">
             <div v-if="item.message.renderKind === 'image'" class="message-bubble image-bubble">
@@ -844,6 +928,15 @@ onBeforeUnmount(() => {
   overflow-x: hidden;
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
+}
+
+.message-stream.instant-scroll-anchor {
+  scroll-behavior: auto !important;
+  -webkit-overflow-scrolling: auto;
+}
+
+.message-stream.message-stream-anchoring {
+  visibility: hidden;
 }
 
 .message-item {

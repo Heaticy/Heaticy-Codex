@@ -1,4 +1,11 @@
 entries:
+  - id: "DEBUG-001"
+    type: debug
+    ref: ".pipeline/debug/debug-001-mobile-scroll-anchor.md"
+    status: completed
+    timestamp: "2026-04-29T21:31:08+08:00"
+    summary: "定位手机端打开长会话仍可见从上到下滑动的原因，并在 ChatView 增加瞬时底部锚定。"
+    trigger: user
   - id: "EXEC-020"
     type: execution
     ref: ".pipeline/prompts/04-final-regression-and-docs.md"

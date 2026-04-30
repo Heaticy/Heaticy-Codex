@@ -1,4 +1,11 @@
 entries:
+  - id: "DEBUG-002"
+    type: debug
+    ref: ".pipeline/debug/debug-002-desktop-top-bar-overlap.md"
+    status: completed
+    timestamp: "2026-04-30T00:05:23+08:00"
+    summary: "定位电脑端打开会话时首个输入气泡被顶部栏遮挡的原因，并将聊天页顶栏/状态栏改为流内 flex 分区。"
+    trigger: user
   - id: "DEBUG-001"
     type: debug
     ref: ".pipeline/debug/debug-001-mobile-scroll-anchor.md"
@@ -182,3 +189,38 @@ entries:
     summary: "全项目预防性审计发现 0 个 Critical、5 个 Warning、2 个 Info。"
     report: ".pipeline/audits/audit-001.md"
     trigger: user
+  - id: "EXEC-030"
+    type: execution
+    ref: ".pipeline/prompts/05-first-public-open-source-release.md"
+    status: running
+    timestamp: "2026-04-30T15:11:27+08:00"
+    summary: "Started M6 first public open-source release 1.0.0, current step write_tests."
+    milestone: "M6"
+    step: "write_tests"
+    trigger: user
+  - id: "EXEC-031"
+    type: execution
+    ref: "test/ports.test.js"
+    status: completed
+    timestamp: "2026-04-30T15:14:00+08:00"
+    summary: "M6 run_tests_red completed: new port tests failed because scripts/lib/ports.mjs was missing."
+    milestone: "M6"
+    step: "run_tests_red"
+    command: "node --test test/ports.test.js"
+  - id: "EXEC-032"
+    type: execution
+    ref: ".pipeline/prompts/05-first-public-open-source-release.md"
+    status: completed
+    timestamp: "2026-04-30T15:16:00+08:00"
+    summary: "Implemented port preflight, 1.0.0 documentation, privacy/security docs, release artifacts, and README screenshots."
+    milestone: "M6"
+    step: "implement"
+  - id: "EXEC-033"
+    type: execution
+    ref: ".pipeline/prompts/05-first-public-open-source-release.md"
+    status: completed
+    timestamp: "2026-04-30T15:25:00+08:00"
+    summary: "M6 review_code completed: npm test, npm run check, and git diff --check all passed."
+    milestone: "M6"
+    step: "review_code"
+    command: "npm test && npm run check && git diff --check"

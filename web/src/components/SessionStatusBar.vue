@@ -97,8 +97,8 @@ function openRaw() {
 
 <style scoped>
 .session-status-bar {
-  position: sticky;
-  top: 50px;
+  position: relative;
+  flex: 0 0 auto;
   z-index: 9;
   border-bottom: 1px solid rgba(125, 185, 255, 0.16);
   background: #070f1d;

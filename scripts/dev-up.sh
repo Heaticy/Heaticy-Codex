@@ -24,14 +24,21 @@ SERVER_LOG="/tmp/codex-server-dev.log"
 WEB_LOG="/tmp/codex-web-dev.log"
 PORT="${PORT:-${CONFIGURED_PORTS[0]:-3211}}"
 WEB_PORT="${WEB_PORT:-${CONFIGURED_PORTS[1]:-5206}}"
+HOST="${HOST:-0.0.0.0}"
 
 echo "[dev-up] stopping old dev processes..."
 pkill -f "vite --config ./web/vite.config.js" >/dev/null 2>&1 || true
 pkill -f "node --watch ./src/server.js" >/dev/null 2>&1 || true
 pkill -f "./src/server.js" >/dev/null 2>&1 || true
 
+echo "[dev-up] checking ports..."
+node ./scripts/check-ports.mjs \
+  --host "$HOST" \
+  --label PORT --port "$PORT" \
+  --label WEB_PORT --port "$WEB_PORT"
+
 echo "[dev-up] starting server (watch) on :$PORT ..."
-nohup env PORT="$PORT" node --watch ./src/server.js >"$SERVER_LOG" 2>&1 &
+nohup env HOST="$HOST" PORT="$PORT" node --watch ./src/server.js >"$SERVER_LOG" 2>&1 &
 
 echo "[dev-up] starting web (vite hmr) on :$WEB_PORT ..."
 nohup env WEB_PORT="$WEB_PORT" npm run web:dev >"$WEB_LOG" 2>&1 &

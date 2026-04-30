@@ -1,60 +1,25 @@
-# Heaticy Codex
+# Heaticy-Codex
 
 English | [简体中文](./README.zh-CN.md)
 
-One thing only: use local `codex` sessions in your browser.
+Use your local `codex` sessions from a browser, including a phone on the same LAN.
 
-This repository is a fork of an open source Codex web terminal project, renamed and maintained by heaticy, with adjustments for LAN and reverse-proxy deployment.
+Heaticy-Codex is a heaticy-maintained fork of [codex-cc-web-terminal](https://github.com/SZZH/codex-cc-web-terminal). This repository focuses on a local-first Codex workspace that is easy to run on a computer and open from a mobile browser over Wi-Fi.
 
-Currently supports **Codex** only.
+The app runs on your own machine. It does not upload your prompts, transcripts, approvals, audit logs, or project data to a Heaticy-Codex service.
 
-## Codex Runtime
-
-- App-server now uses Codex `app-server` over **stdio** by default, so a normal start no longer opens `127.0.0.1:8777`.
-- Temporary websocket compatibility is still available with `CODEX_APP_SERVER_TRANSPORT=ws`; that path keeps `CODEX_APP_SERVER_LISTEN_URL` and logs a deprecation warning.
-- When `CODEX_APP_SERVER_ENABLED=false`, the fallback `json_exec` path uses `@openai/codex-sdk`.
-
-## Approvals
-
-Codex command, file-change, and permission requests are surfaced in the web UI for per-action approval. `CODEX_FULL_ACCESS=true` keeps the old auto-allow behavior only for non-high-risk requests; high-risk requests always require manual approval.
-
-Persistent allow rules live in `~/.heaticy-codex/approvals.json`. Audit records are appended to `~/.heaticy-codex/audit.log`.
-
-## Operations
-
-- `GET /api/health` stays public for lightweight probes.
-- `GET /api/healthz` returns bridge readiness, active runner count, and last error time.
-- `GET /api/metrics` exposes Prometheus text metrics such as active sessions, Codex turn totals, and approval decisions.
-- `GET /api/healthz` and `GET /api/metrics` now require an authenticated web session.
-- Historical transcript cleanup runs automatically with a default retention of 30 days, or 7 days for low-information sessions.
-- The session list now includes a maintenance strip that shows the latest cleanup report and can trigger manual cleanup after login.
-- PM2 config restarts daily at 04:00 and restarts the process if memory exceeds 1G.
-
-### History Cleanup Configuration
-
-Set these environment variables in `.env` when you need different retention behavior:
-
-- `HISTORY_RETENTION_DAYS` default `30`
-- `HISTORY_SIMPLE_RETENTION_DAYS` default `7`
-- `HISTORY_SIMPLE_MAX_MESSAGES` default `4`
-- `HISTORY_SIMPLE_MAX_CHARS` default `1000`
-- `HISTORY_CLEANUP_INTERVAL_HOURS` default `24`
-
-Simple sessions are cleaned earlier when they contain fewer than 4 messages or less than about 1000 characters of text.
-
-## Screenshots
+## Preview
 
 <p align="center">
-  <img src="./docs/images/codex-web-terminal.jpg" alt="Heaticy Codex mobile screenshot 1" width="280" />
-  <img src="./docs/images/codex-web-terminal2.jpg" alt="Heaticy Codex mobile screenshot 2" width="280" />
+  <img src="./docs/images/heaticy-codex-desktop.webp" alt="Heaticy-Codex desktop browser interface showing saved Codex sessions" width="920" />
 </p>
 
-## Prerequisites
+## Requirements
 
 - Node.js 22+
 - `codex` CLI installed and available in `PATH`
 
-## Quick Start (1 minute)
+## Quick Start
 
 ```bash
 git clone https://github.com/SZZH/heaticy-codex.git
@@ -62,32 +27,74 @@ cd heaticy-codex
 npm run setup
 ```
 
-`npm run setup` guides you through `.env` setup, dependency installation, and service startup.
+`npm run setup` checks your environment, writes `.env`, validates that `PORT` and `WEB_PORT` are not occupied, installs dependencies if you choose, and can start the dev service.
 
-Or run manually:
+Manual setup:
 
 ```bash
-cd heaticy-codex
 cp .env.example .env
-# Set your own ACCESS_TOKEN in .env
+# Edit ACCESS_TOKEN, PORT, WEB_PORT, and HOST if needed.
 npm install
 npm run dev:up
 ```
 
-Open:
+Open on the computer:
 
-- Frontend (recommended): `http://127.0.0.1:<WEB_PORT>/#/sessions`
-- Backend direct: `http://127.0.0.1:<PORT>`
+- Frontend: `http://127.0.0.1:<WEB_PORT>/#/sessions`
+- Backend health: `http://127.0.0.1:<PORT>/api/health`
 
-## Mobile Access
+## Mobile LAN Access
 
-### A. Same Wi-Fi
+<p align="center">
+  <img src="./docs/images/heaticy-codex-mobile.webp" alt="Heaticy-Codex mobile browser interface over LAN" width="300" />
+</p>
 
-1. In `.env`, make sure `HOST=0.0.0.0`.
-2. Open on your phone: `http://<your-lan-ip>:3211`
-3. Sign in with `ACCESS_TOKEN`.
+1. Keep `HOST=0.0.0.0` in `.env`.
+2. Set your own `WEB_PORT`, for example `WEB_PORT=5206`.
+3. Start the app with `npm run dev:up` or `npm run service:start`.
+4. On a phone connected to the same Wi-Fi, open `http://<LAN-IP>:<WEB_PORT>/#/sessions`.
+5. Sign in with `ACCESS_TOKEN`.
 
-## Deployment (PM2)
+`PORT` is the backend API port. `WEB_PORT` is the browser entry point. Both are configurable, and setup/start scripts check for occupied ports before using them.
+
+## Common Commands
+
+```bash
+npm run setup          # Guided setup with port checks
+npm run dev            # Foreground dev mode
+npm run dev:up         # macOS/Linux background dev mode
+npm run dev:down       # Stop background dev processes
+npm run service:start  # PM2 production-style service
+npm run service:status # PM2 status and health check
+npm run check          # Syntax checks and frontend build
+npm test               # Backend/unit tests
+```
+
+## Local Data And Privacy
+
+Heaticy-Codex is local-first:
+
+- It reads Codex session transcripts from your local Codex home.
+- It stores Heaticy-Codex state locally in `data/` and `~/.heaticy-codex/`.
+- Persistent approval rules live in `~/.heaticy-codex/approvals.json`.
+- Audit records are appended to `~/.heaticy-codex/audit.log`.
+- `.env`, `data/`, `logs/`, `.codex`, `.plan-state`, and `web/dist/` are ignored by git.
+
+See [PRIVACY.md](./PRIVACY.md) for the full data boundary.
+
+## Security Notes
+
+- Set a strong `ACCESS_TOKEN`.
+- Use `HOST=0.0.0.0` only on a network you control.
+- Do not expose the app directly to the public internet without your own HTTPS, authentication, and network controls.
+- `GET /api/health` is public for probes. `/api/healthz` and `/api/metrics` require login.
+- High-risk Codex approval requests require manual confirmation.
+
+See [SECURITY.md](./SECURITY.md) for reporting and deployment guidance.
+
+## Optional Advanced Deployment
+
+PM2/service mode:
 
 ```bash
 npm run service:start
@@ -95,39 +102,15 @@ npm run service:status
 npm run service:logs
 ```
 
-## Common Commands
-
-```bash
-npm run dev            # Dev mode (server + web, foreground)
-npm run dev:up         # macOS/Linux: start dev in background
-npm run dev:down       # macOS/Linux: stop background dev processes
-npm run check          # Quick checks
-```
-
-## Common Issues
-
-1. `Cross-origin request rejected`
-- Start with `npm run dev` (or `npm run dev:up` on macOS/Linux). Do not manually split startup commands.
-
-2. Frontend port is not reachable
-- Run `npm run dev` first, then check port:
-```bash
-# macOS/Linux
-lsof -iTCP:<WEB_PORT> -sTCP:LISTEN -n -P
-
-```
-
-3. Phone says desktop is offline
-- Check service status first: `npm run service:status`
-- Then verify network path: same Wi-Fi or another route you explicitly configured yourself
-- If you changed `PORT`, use the same port in your phone URL.
-- `npm run setup` now writes both `PORT` and `WEB_PORT` into `.env`.
-- You can still override them temporarily with `WEB_PORT=xxxx PORT=yyyy npm run dev` or `npm run dev:up`.
+Domain, HTTPS, and reverse-proxy deployments are optional advanced setups. Start from the local/LAN path first, then put your own proxy controls in front of the service if needed.
 
 ## Open Source
 
-- Forked and maintained by heaticy
-- [LICENSE](./LICENSE)
-- [CONTRIBUTING.md](./CONTRIBUTING.md)
-- [SECURITY.md](./SECURITY.md)
-- [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
+- Version: `1.0.0`
+- License: [MIT](./LICENSE)
+- Privacy: [PRIVACY.md](./PRIVACY.md)
+- Security: [SECURITY.md](./SECURITY.md)
+- Contributing: [CONTRIBUTING.md](./CONTRIBUTING.md)
+- Code of Conduct: [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
+
+This project is forked from [codex-cc-web-terminal](https://github.com/SZZH/codex-cc-web-terminal) and maintained as Heaticy-Codex.

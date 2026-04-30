@@ -802,6 +802,9 @@ onBeforeUnmount(() => {
 .chat-shell {
   height: var(--chat-vh, 100dvh);
   min-height: var(--chat-vh, 100dvh);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background:
     linear-gradient(90deg, rgba(56, 189, 248, 0.07), transparent 16%, transparent 84%, rgba(94, 234, 212, 0.06)),
     radial-gradient(circle at 50% -10%, rgba(14, 165, 233, 0.24), transparent 34%),
@@ -810,8 +813,8 @@ onBeforeUnmount(() => {
 }
 
 .mobile-header {
-  position: sticky;
-  top: 0;
+  position: relative;
+  flex: 0 0 auto;
   z-index: 10;
   display: grid;
   grid-template-columns: 32px minmax(0, 1fr) auto;
@@ -901,11 +904,12 @@ onBeforeUnmount(() => {
 }
 
 .chat-screen {
+  flex: 1 1 auto;
   display: flex;
   flex-direction: column;
-  min-height: calc(100dvh - 72px);
+  min-height: 0;
   min-width: 0;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 .activity-strip {
@@ -919,11 +923,13 @@ onBeforeUnmount(() => {
 }
 
 .message-stream {
+  min-height: 0;
   flex: 1;
   display: flex;
   flex-direction: column;
   gap: 10px;
   padding: 18px 14px calc(40px + env(safe-area-inset-bottom));
+  scroll-padding-top: 18px;
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;

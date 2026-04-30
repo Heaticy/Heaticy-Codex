@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { resolvePortChoice } from "./lib/ports.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -185,6 +186,19 @@ function getManagedApps() {
 
 async function handleStartLike(action, options) {
   ensureLogsDir();
+  if (action === "start") {
+    const appName = getAppName(options.mode);
+    const existing = readPm2Apps().find((app) => app?.name === appName);
+    const isManagedOnline = existing && ["online", "launching"].includes(String(existing?.pm2_env?.status || ""));
+    const portChoice = await resolvePortChoice(options.healthPort, { host: "0.0.0.0" });
+    if (portChoice.status === "invalid") {
+      fail(`Health port ${options.healthPort} is not a valid TCP port.`);
+    }
+    if (portChoice.status === "occupied" && !isManagedOnline) {
+      const recommendation = portChoice.recommendedPort ? ` Recommended replacement: ${portChoice.recommendedPort}.` : "";
+      fail(`Port ${portChoice.port} is already in use before service start.${recommendation}`);
+    }
+  }
   buildFrontend();
   const appName = getAppName(options.mode);
   runPm2(["startOrReload", ecosystemFile, "--only", appName, "--update-env"]);

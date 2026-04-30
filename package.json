@@ -1,9 +1,9 @@
 {
   "name": "heaticy-codex",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Browser-based Codex workspace for heaticy on macOS and Linux.",
+  "description": "Local-first browser workspace for Codex on desktop and mobile LAN.",
   "scripts": {
     "setup": "node ./scripts/setup.mjs",
     "start": "node ./src/server.js",
@@ -15,7 +15,7 @@
     "dev:down": "bash ./scripts/dev-down.sh",
     "server:dev": "node --watch ./src/server.js",
     "dev:hot": "concurrently -k -n server,web \"npm:server:dev\" \"npm:web:dev\"",
-    "check": "node --check ./src/server.js && node --check ./src/config.js && node --check ./src/sessionManager.js && node --check ./scripts/service.mjs && node --check ./scripts/launchd/manage.mjs && npm run web:build",
+    "check": "node --check ./src/server.js && node --check ./src/config.js && node --check ./src/sessionManager.js && node --check ./scripts/setup.mjs && node --check ./scripts/check-ports.mjs && node --check ./scripts/service.mjs && node --check ./scripts/launchd/manage.mjs && npm run web:build",
     "pm2:dev": "pm2 startOrReload ecosystem.config.cjs --only heaticy-codex-dev --update-env",
     "pm2:prod": "pm2 startOrReload ecosystem.config.cjs --only heaticy-codex --update-env",
     "pm2:stop": "pm2 delete heaticy-codex heaticy-codex-dev",

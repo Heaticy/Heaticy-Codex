@@ -1,18 +1,18 @@
 pipeline:
   name: "heaticy-codex"
-  status: idle
-  prompts_total: 9
+  status: completed
+  prompts_total: 6
   prompts_completed: 5
   started: "2026-04-29T01:06:43+08:00"
   finished: null
 
-last_heartbeat: "2026-04-29T21:05:51+08:00"
+last_heartbeat: "2026-04-30T15:25:00+08:00"
 
 current:
-  phase: lifecycle_debug
+  phase: completed
   prompt_index: 5
-  prompt_file: ".pipeline/prompts/05-mobile-instant-bottom-anchor.md"
-  prompt_name: "M6 — Mobile instant bottom anchoring"
+  prompt_file: ".pipeline/prompts/05-first-public-open-source-release.md"
+  prompt_name: "M6 — First public open-source release 1.0.0"
   milestone_id: "M6"
   step: null
   step_index: 0
@@ -106,53 +106,23 @@ milestones:
       command: "npm run check && git diff --check"
       result: "passed"
   - id: "M6"
-    title: "Mobile instant bottom anchoring"
-    prompt: ".pipeline/prompts/05-mobile-instant-bottom-anchor.md"
-    status: pending
-    current_step: write_tests
+    title: "First public open-source release 1.0.0"
+    prompt: ".pipeline/prompts/05-first-public-open-source-release.md"
+    status: completed
+    current_step: review_code
     steps:
-      write_tests: pending
-      review_tests: pending
-      run_tests_red: pending
-      implement: pending
-      run_tests_green: pending
-      review_code: pending
-  - id: "M7"
-    title: "Codex skill discovery API"
-    prompt: ".pipeline/prompts/06-skill-discovery-api.md"
-    status: pending
-    current_step: write_tests
-    steps:
-      write_tests: pending
-      review_tests: pending
-      run_tests_red: pending
-      implement: pending
-      run_tests_green: pending
-      review_code: pending
-  - id: "M8"
-    title: "Composer skill completion UI"
-    prompt: ".pipeline/prompts/07-composer-skill-completion-ui.md"
-    status: pending
-    current_step: write_tests
-    steps:
-      write_tests: pending
-      review_tests: pending
-      run_tests_red: pending
-      implement: pending
-      run_tests_green: pending
-      review_code: pending
-  - id: "M9"
-    title: "Final regression and documentation"
-    prompt: ".pipeline/prompts/08-final-regression-and-docs.md"
-    status: pending
-    current_step: write_tests
-    steps:
-      write_tests: pending
-      review_tests: pending
-      run_tests_red: pending
-      implement: pending
-      run_tests_green: pending
-      review_code: pending
+      write_tests: completed
+      review_tests: completed
+      run_tests_red: completed
+      implement: completed
+      run_tests_green: completed
+      review_code: completed
+    tests:
+      command: "npm test"
+      result: "31 passed"
+    check:
+      command: "npm run check && git diff --check"
+      result: "passed"
 
 history:
   completed_prompts: []
@@ -257,3 +227,23 @@ history:
       step: plan_generate
       status: pending_confirmation
       summary: "追加移动端瞬间底部定位与 `$` skill 补全计划，等待确认后执行。"
+    - timestamp: "2026-04-30T15:11:27+08:00"
+      milestone: "M6"
+      step: write_tests
+      status: running
+      summary: "开始执行 M6 首个公开开源版本 1.0.0，进入 write_tests。"
+    - timestamp: "2026-04-30T15:14:00+08:00"
+      milestone: "M6"
+      step: run_tests_red
+      status: completed
+      summary: "新增端口检测测试先红灯：缺少 scripts/lib/ports.mjs。"
+    - timestamp: "2026-04-30T15:16:00+08:00"
+      milestone: "M6"
+      step: implement
+      status: completed
+      summary: "完成端口检测 helper、setup/dev/service 集成、双语 README、PRIVACY、CHANGELOG、release checklist、release notes 与截图资产。"
+    - timestamp: "2026-04-30T15:25:00+08:00"
+      milestone: "M6"
+      step: review_code
+      status: completed
+      summary: "M6 完成：npm test、npm run check、git diff --check 全部通过。"

@@ -1,60 +1,25 @@
-# Heaticy Codex
+# Heaticy-Codex
 
 [English](./README.md) | 简体中文
 
-只做一件事：把你电脑上的 `codex` 会话放到浏览器（含手机）里用。
+把你电脑上的本地 `codex` 会话放到浏览器里用，也可以在同一局域网的手机浏览器里打开。
 
-这个仓库是一个由 heaticy 维护和命名的开源 fork，基于原有 Codex Web Terminal 做了重命名，并针对局域网与反向代理部署进行了调整。
+Heaticy-Codex 是由 heaticy 维护的 [codex-cc-web-terminal](https://github.com/SZZH/codex-cc-web-terminal) fork。本仓库专注于本地优先的 Codex 工作区：电脑上运行，电脑浏览器和手机浏览器都能访问。
 
-当前仅支持 **Codex**。
+应用运行在你自己的机器上。Heaticy-Codex 不会把你的 prompt、transcript、审批记录、审计日志或项目数据上传到任何 Heaticy-Codex 服务。
 
-## Codex 运行方式
-
-- App-server 默认改为通过 **stdio** 运行 `codex app-server`，正常启动不再监听 `127.0.0.1:8777`。
-- 旧 websocket transport 可临时用 `CODEX_APP_SERVER_TRANSPORT=ws` 保留；该模式继续读取 `CODEX_APP_SERVER_LISTEN_URL`，启动时会打印废弃警告。
-- 当 `CODEX_APP_SERVER_ENABLED=false` 时，`json_exec` fallback 改走 `@openai/codex-sdk`。
-
-## 审批流
-
-Codex 的命令执行、文件修改、权限提升请求会推到前端逐条确认。`CODEX_FULL_ACCESS=true` 只会继续自动允许非高危请求；高危请求始终需要人工确认。
-
-持久化白名单位于 `~/.heaticy-codex/approvals.json`，审计日志追加写入 `~/.heaticy-codex/audit.log`。
-
-## 运维接口
-
-- `GET /api/health` 保持未登录可访问，适合轻量探活。
-- `GET /api/healthz` 返回 bridge ready、runner 数量、最近错误时间。
-- `GET /api/metrics` 暴露 Prometheus 文本指标，包括活跃会话、Codex turn 计数和审批决策计数。
-- `GET /api/healthz` 和 `GET /api/metrics` 现在都需要先登录。
-- 历史 transcript 会自动清理：普通历史默认保留 30 天，低信息历史默认保留 7 天。
-- 会话列表页现在自带维护状态区，可查看最近清理报告并在登录后手动触发清理。
-- PM2 配置已加入每天 04:00 重启与 1G 内存上限重启。
-
-### 历史清理配置
-
-如需调整保留策略，可在 `.env` 里设置：
-
-- `HISTORY_RETENTION_DAYS` 默认 `30`
-- `HISTORY_SIMPLE_RETENTION_DAYS` 默认 `7`
-- `HISTORY_SIMPLE_MAX_MESSAGES` 默认 `4`
-- `HISTORY_SIMPLE_MAX_CHARS` 默认 `1000`
-- `HISTORY_CLEANUP_INTERVAL_HOURS` 默认 `24`
-
-低信息历史会话的判定条件是：消息数少于 4 条，或消息文本总长度低于约 1000 字符。
-
-## 示例截图
+## 界面预览
 
 <p align="center">
-  <img src="./docs/images/codex-web-terminal.jpg" alt="Heaticy Codex 手机界面截图 1" width="280" />
-  <img src="./docs/images/codex-web-terminal2.jpg" alt="Heaticy Codex 手机界面截图 2" width="280" />
+  <img src="./docs/images/heaticy-codex-desktop.webp" alt="Heaticy-Codex 电脑浏览器界面，展示已保存的 Codex 会话" width="920" />
 </p>
 
-## 前置依赖
+## 前置要求
 
 - Node.js 22+
-- 已安装 `codex` 命令并可在终端直接运行
+- 已安装 `codex` 命令，并且能在终端直接运行
 
-## 1 分钟本地跑起来
+## 快速开始
 
 ```bash
 git clone https://github.com/SZZH/heaticy-codex.git
@@ -62,32 +27,74 @@ cd heaticy-codex
 npm run setup
 ```
 
-`npm run setup` 会交互式引导你完成：`.env` 配置、安装依赖、启动服务。
+`npm run setup` 会检查环境、写入 `.env`、确认 `PORT` 和 `WEB_PORT` 没有被占用、按你的选择安装依赖，并可直接启动开发服务。
 
-或手动执行：
+手动配置：
 
 ```bash
-cd heaticy-codex
 cp .env.example .env
-# 把 .env 里的 ACCESS_TOKEN 改成你自己的
+# 修改 ACCESS_TOKEN、PORT、WEB_PORT、HOST
 npm install
 npm run dev:up
 ```
 
-打开：
+电脑打开：
 
-- 前端（推荐）：`http://127.0.0.1:<WEB_PORT>/#/sessions`
-- 后端直连：`http://127.0.0.1:<PORT>`
+- 前端入口：`http://127.0.0.1:<WEB_PORT>/#/sessions`
+- 后端健康检查：`http://127.0.0.1:<PORT>/api/health`
 
-## 手机访问
+## 手机局域网访问
 
-### A. 同一 Wi-Fi
+<p align="center">
+  <img src="./docs/images/heaticy-codex-mobile.webp" alt="Heaticy-Codex 手机浏览器局域网访问界面" width="300" />
+</p>
 
-1. `.env` 确认：`HOST=0.0.0.0`
-2. 手机打开：`http://你的电脑局域网IP:3211`
-3. 用 `ACCESS_TOKEN` 登录
+1. `.env` 保持 `HOST=0.0.0.0`。
+2. 设置你自己的 `WEB_PORT`，例如 `WEB_PORT=5206`。
+3. 用 `npm run dev:up` 或 `npm run service:start` 启动。
+4. 手机连接同一个 Wi-Fi，打开 `http://<你的电脑局域网IP>:<WEB_PORT>/#/sessions`。
+5. 使用 `ACCESS_TOKEN` 登录。
 
-## 部署（PM2）
+`PORT` 是后端 API 端口，`WEB_PORT` 是浏览器访问入口端口。两个端口都可以自己设置，setup 和启动脚本会在使用前检查端口是否被占用。
+
+## 常用命令
+
+```bash
+npm run setup          # 交互式配置，含端口检查
+npm run dev            # 前台开发模式
+npm run dev:up         # macOS/Linux 后台开发模式
+npm run dev:down       # 停止后台开发进程
+npm run service:start  # PM2 服务模式
+npm run service:status # PM2 状态和健康检查
+npm run check          # 语法检查和前端构建
+npm test               # 后端/单元测试
+```
+
+## 本地数据与隐私
+
+Heaticy-Codex 是本地优先的：
+
+- 从你的本地 Codex home 读取 Codex 会话 transcript。
+- 项目自身状态写在项目内 `data/` 和用户目录 `~/.heaticy-codex/`。
+- 持久化审批规则写在 `~/.heaticy-codex/approvals.json`。
+- 审计日志追加写入 `~/.heaticy-codex/audit.log`。
+- `.env`、`data/`、`logs/`、`.codex`、`.plan-state`、`web/dist/` 已被 git 忽略。
+
+完整数据边界见 [PRIVACY.md](./PRIVACY.md)。
+
+## 安全说明
+
+- 一定要设置强 `ACCESS_TOKEN`。
+- 只在你控制的网络里使用 `HOST=0.0.0.0`。
+- 不要把服务直接裸露到公网；如果要用域名访问，请自行配置 HTTPS、额外认证和网络访问控制。
+- `GET /api/health` 保持公开用于探活，`/api/healthz` 和 `/api/metrics` 需要登录。
+- 高风险 Codex 审批请求始终需要人工确认。
+
+漏洞报告和部署边界见 [SECURITY.md](./SECURITY.md)。
+
+## 可选高级部署
+
+PM2/service 模式：
 
 ```bash
 npm run service:start
@@ -95,39 +102,15 @@ npm run service:status
 npm run service:logs
 ```
 
-## 最常用命令
-
-```bash
-npm run dev            # 开发模式（前后端前台运行）
-npm run dev:up         # 仅 macOS/Linux：后台启动开发服务
-npm run dev:down       # 仅 macOS/Linux：停止后台开发进程
-npm run check          # 快速自检
-```
-
-## 三个高频问题
-
-1. `Cross-origin request rejected`
-- 优先用 `npm run dev`（macOS/Linux 也可用 `npm run dev:up`）启动，不要手动拆开前后端起。
-
-2. 前端端口打不开
-- 先执行 `npm run dev`，再看端口：
-```bash
-# macOS/Linux
-lsof -iTCP:<WEB_PORT> -sTCP:LISTEN -n -P
-
-```
-
-3. 手机提示“电脑未连接”
-- 先确认电脑服务在线：`npm run service:status`
-- 再确认网络路径正确：同 Wi-Fi，或你自己已经配置好的其他网络路径
-- 如果你改过 `PORT`，手机访问地址也要用同一个端口。
-- `npm run setup` 现在会把 `PORT` 和 `WEB_PORT` 一起写进 `.env`。
-- 也可以临时覆盖：`WEB_PORT=xxxx PORT=yyyy npm run dev` 或 `npm run dev:up`。
+域名、HTTPS、反向代理属于可选高级部署。建议先跑通本地和局域网 IP 加端口访问，再按你自己的网络环境加代理和安全控制。
 
 ## 开源说明
 
-- 这是一个由 heaticy 维护的开源 fork
-- [LICENSE](./LICENSE)
-- [CONTRIBUTING.md](./CONTRIBUTING.md)
-- [SECURITY.md](./SECURITY.md)
-- [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
+- 版本：`1.0.0`
+- License：[MIT](./LICENSE)
+- 隐私：[PRIVACY.md](./PRIVACY.md)
+- 安全：[SECURITY.md](./SECURITY.md)
+- 贡献：[CONTRIBUTING.md](./CONTRIBUTING.md)
+- 行为准则：[CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
+
+本项目 fork 自 [codex-cc-web-terminal](https://github.com/SZZH/codex-cc-web-terminal)，并作为 Heaticy-Codex 维护。

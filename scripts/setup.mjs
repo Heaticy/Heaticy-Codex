@@ -4,6 +4,7 @@ import { stdin as input, stdout as output } from 'node:process';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { resolvePortChoice } from './lib/ports.mjs';
 
 const rl = createInterface({ input, output });
 const projectRoot = process.cwd();
@@ -54,6 +55,42 @@ function validPort(value) {
   return Number.isInteger(n) && n >= 1 && n <= 65535;
 }
 
+async function askPort(question, current, { host = '0.0.0.0', otherPort = null } = {}) {
+  let port = await askWithDefault(question, current);
+  while (true) {
+    if (!validPort(port)) {
+      port = await askWithDefault('端口无效，请输入 1-65535 的整数端口', current);
+      continue;
+    }
+
+    if (otherPort && String(port) === String(otherPort)) {
+      output.write(`端口 ${port} 已被本次配置的另一个服务使用，请换一个端口。\n`);
+      port = await askWithDefault(question, String(Number(port) + 1));
+      continue;
+    }
+
+    const choice = await resolvePortChoice(port, { host });
+    if (choice.status === 'available') {
+      return String(choice.port);
+    }
+
+    if (choice.status === 'occupied') {
+      if (!choice.recommendedPort) {
+        output.write(`端口 ${choice.port} 已被占用，且没有在附近找到可用端口。\n`);
+        port = await askWithDefault(question, String(Number(port) + 1));
+        continue;
+      }
+
+      output.write(`端口 ${choice.port} 已被占用，推荐使用 ${choice.recommendedPort}。\n`);
+      const useRecommended = await askYesNo(`是否改用 ${choice.recommendedPort}？`, true);
+      port = useRecommended ? String(choice.recommendedPort) : await askWithDefault(question, String(choice.recommendedPort));
+      continue;
+    }
+
+    port = await askWithDefault('端口无效，请输入 1-65535 的整数端口', current);
+  }
+}
+
 async function main() {
   output.write('Heaticy Codex 一键安装向导\n');
   output.write(`目录: ${projectRoot}\n`);
@@ -89,18 +126,15 @@ async function main() {
   }
 
   logStep('交互式配置');
+  const host = await askWithDefault('监听地址 HOST', base.get('HOST') || '0.0.0.0');
+  base.set('HOST', host);
+
   const currentPort = base.get('PORT') || '3211';
-  let port = await askWithDefault('服务端口 PORT', currentPort);
-  while (!validPort(port)) {
-    port = await askWithDefault('端口无效，请输入 1-65535 的整数端口', currentPort);
-  }
+  const port = await askPort('服务端口 PORT', currentPort, { host });
   base.set('PORT', port);
 
   const currentWebPort = base.get('WEB_PORT') || '5206';
-  let webPort = await askWithDefault('前端端口 WEB_PORT', currentWebPort);
-  while (!validPort(webPort)) {
-    webPort = await askWithDefault('端口无效，请输入 1-65535 的整数端口', currentWebPort);
-  }
+  const webPort = await askPort('前端端口 WEB_PORT', currentWebPort, { host, otherPort: port });
   base.set('WEB_PORT', webPort);
 
   const tokenHint = base.get('ACCESS_TOKEN') && base.get('ACCESS_TOKEN') !== 'change-me' ? '保持当前' : '请输入';
@@ -110,9 +144,6 @@ async function main() {
     token = (await rl.question('ACCESS_TOKEN 不能为空且不能是 change-me，请重新输入: ')).trim();
   }
   base.set('ACCESS_TOKEN', token);
-
-  const host = await askWithDefault('监听地址 HOST', base.get('HOST') || '0.0.0.0');
-  base.set('HOST', host);
 
   const trustedCidrs = await askWithDefault('允许访问的网段 TRUSTED_CIDRS（逗号分隔，可留空）', base.get('TRUSTED_CIDRS') || '');
   base.set('TRUSTED_CIDRS', trustedCidrs);

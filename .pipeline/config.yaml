@@ -20,7 +20,7 @@ execution:
   check_command: "npm run check"
 
 current:
-  phase: "plan_confirm"
+  phase: "completed"
 
 milestones:
   - id: "M1"
@@ -39,14 +39,5 @@ milestones:
     prompt: ".pipeline/prompts/04-final-regression-and-docs.md"
     title: "Final regression and documentation"
   - id: "M6"
-    prompt: ".pipeline/prompts/05-mobile-instant-bottom-anchor.md"
-    title: "Mobile instant bottom anchoring"
-  - id: "M7"
-    prompt: ".pipeline/prompts/06-skill-discovery-api.md"
-    title: "Codex skill discovery API"
-  - id: "M8"
-    prompt: ".pipeline/prompts/07-composer-skill-completion-ui.md"
-    title: "Composer skill completion UI"
-  - id: "M9"
-    prompt: ".pipeline/prompts/08-final-regression-and-docs.md"
-    title: "Final regression and documentation"
+    prompt: ".pipeline/prompts/05-first-public-open-source-release.md"
+    title: "First public open-source release 1.0.0"

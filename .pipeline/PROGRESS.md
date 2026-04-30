@@ -1,9 +1,9 @@
 # heaticy-codex — 开发进度
 
-> 最后更新：01:42 | 状态：已完成 | 进度：5/5 Milestone
+> 最后更新：2026-04-30 15:25 | 状态：已完成 | 进度：6/6 Milestone
 
 ## 当前状态
-✅ **全部里程碑完成** — 最终回归、文档与架构记录已收尾
+✅ **全部里程碑完成** — `Heaticy-Codex 1.0.0` 首个公开开源版本准备完成
 
 ## Milestone 进度
 
@@ -14,6 +14,7 @@
 | M3 | History cleanup backend | ✅ 完成 | 历史清理策略、维护报告与 API，27 个测试通过 |
 | M4 | Maintenance report UI | ✅ 完成 | 会话列表维护条、手动清理入口、web:build 通过 |
 | M5 | Final regression and documentation | ✅ 完成 | npm test / npm run check / git diff --check 通过，文档已更新 |
+| M6 | First public open-source release 1.0.0 | ✅ 完成 | 隐私、端口/LAN、双语 README、截图、发布物与最终验收完成 |
 
 ## 最近活动
 - **01:06** M1 开始执行，进入 write_tests。
@@ -30,6 +31,10 @@
 - **01:33** M4 开始执行，进入 write_tests。
 - **01:42** M4 完成，维护报告 UI 已接入会话列表，`npm run web:build` 通过。
 - **01:42** M5 完成，最终回归、README 与 architecture 更新完成。
+- **15:11** M6 开始执行，进入 write_tests；将先补端口检测测试，再推进实现与文档。
+- **15:14** M6 端口检测测试红灯符合预期：缺少 `scripts/lib/ports.mjs`。
+- **15:16** M6 实现端口检测、setup/dev/service 集成、双语 README、PRIVACY、CHANGELOG、release checklist、release notes 与截图资产。
+- **15:25** M6 最终验证通过：`npm test`、`npm run check`、`git diff --check`。
 
 ## Deferred 项
 - 无

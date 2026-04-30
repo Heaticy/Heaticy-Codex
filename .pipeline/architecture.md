@@ -1,4 +1,4 @@
-# Architecture Baseline — Heaticy Codex Audit Fixes
+# Architecture Baseline — Heaticy-Codex 1.0.0 Open Source Release
 
 ## 项目结构
 - 后端：Node.js ESM + Koa，入口为 `src/server.js`，应用组装在 `src/koa-app.js`。
@@ -27,20 +27,34 @@
 - 不改变 Codex 执行模式和 provider 抽象。
 - 不删除项目分组索引。
 
-## 追加计划：移动端底部定位与 Skill 补全
+## 追加计划：首个公开开源版本 1.0.0
 
 ### 目标
-- 修复移动端打开长会话时可见的顶部到尾部滚动过程，让历史消息加载完成后直接落在底部。
-- 增加 Codex 风格 `$` skill 补全，支持 canonical skill 名和短别名匹配。
+- 将项目整理为 `Heaticy-Codex` 首个公开开源版本 `1.0.0`。
+- 保留 heaticy 品牌和标准 fork 致谢。
+- 明确完全本地运行、不上传用户数据、不收集远程遥测。
+- 确保电脑 Web 与手机 Web 的局域网访问路径清晰可靠。
+- 用中英文 README、PRIVACY、SECURITY、CHANGELOG、release checklist 和 GitHub Release 草稿支撑公开发布。
 
 ### 相关边界
-- 前端会话打开与滚动控制集中在 `web/src/App.vue` 和 `web/src/components/ChatView.vue`。
-- 当前 `ChatView` 通过 `openToken`、message watcher 和 `scrollToBottom()` 管理底部定位；移动端需要避免 momentum/smooth scroll 造成的可见滚动。
-- skill discovery 应落在后端路由层，前端只消费候选项并处理输入框交互。
-- 后端可基于 `config.codexHome` 或环境中的 Codex home 推导 `~/.codex/skills`，并解析 `SKILL.md` front matter。
+- 启动配置集中在 `.env`、`src/config.js`、`scripts/setup.mjs`、`scripts/dev-up.sh`、`scripts/service.mjs` 和 PM2 配置。
+- 浏览器主入口应以 `WEB_PORT` 为准；后端 API 使用 `PORT`。
+- 局域网访问主路径是 `HOST=0.0.0.0`，手机访问应说明 `http://<LAN-IP>:<WEB_PORT>/#/sessions`。
+- 本地数据边界包括项目内 `data/`，用户目录 `~/.heaticy-codex/`，以及 Codex 自身 transcript 目录。
+- README 截图资产放入 `docs/images/` 并纳入 git 管理，提交前需要压缩和隐私检查。
 
 ### 计划变更
-- M6：调整移动端强制底部定位策略，历史加载完成后一次性显示在底部，保留 live pinned-bottom 语义。
-- M7：新增认证后的 skill discovery API，返回 canonical name、description、aliases 等补全元数据。
-- M8：新增 composer `$` 补全 UI，支持触屏选择和键盘导航，插入 `$hypo-workflow:plan` 这类完整形式。
-- M9：最终回归、文档与架构说明。
+- M6.1：开源身份、fork 致谢、`PRIVACY.md`、安全说明和 issue/PR 隐私提醒。
+- M6.2：启动端口检测、占用端口提示、可用端口推荐，以及 LAN 访问路径文档。
+- M6.3：中英文 README 重写，放置桌面和手机截图资产。
+- M6.4：重建 `CHANGELOG.md`，新增 release checklist 和 GitHub Release notes 草稿。
+- M6.5：最终测试、secret/privacy scan、图片链接和发布准备验收。
+
+### 已实现结果
+- 新增 `scripts/lib/ports.mjs` 和 `scripts/check-ports.mjs`，并接入 `scripts/setup.mjs`、`scripts/dev-up.sh` 和 `scripts/service.mjs`。
+- 新增 `test/ports.test.js` 覆盖端口格式、占用检测和可用端口推荐。
+- `README.md` 与 `README.zh-CN.md` 已重写为 1.0.0 公开版文档。
+- 新增 `PRIVACY.md`、`docs/release-checklist.md`、`docs/releases/v1.0.0.md`。
+- `CHANGELOG.md` 已重建为公开 1.0.0 release notes。
+- 桌面与手机截图已压缩为 `docs/images/heaticy-codex-desktop.webp` 和 `docs/images/heaticy-codex-mobile.webp`。
+- 最终验证通过：`npm test` 31 passed，`npm run check` passed，`git diff --check` passed。

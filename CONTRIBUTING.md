@@ -19,6 +19,8 @@ npm install
 npm run dev:up
 ```
 
+`npm run setup` is also available and checks whether `PORT` and `WEB_PORT` are already occupied before writing `.env`.
+
 ## Checks Before PR
 
 Run:
@@ -31,5 +33,5 @@ npm run check
 
 - Prefer minimal, local changes.
 - Do not include secrets, personal paths, or local debug artifacts in commits.
+- Do not paste `ACCESS_TOKEN`, `.env`, local Codex transcripts, sensitive logs, or screenshots containing secrets into issues or pull requests.
 - Keep `web/dist/` out of git history (already ignored).
-

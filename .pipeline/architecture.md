@@ -58,3 +58,37 @@
 - `CHANGELOG.md` 已重建为公开 1.0.0 release notes。
 - 桌面与手机截图已压缩为 `docs/images/heaticy-codex-desktop.webp` 和 `docs/images/heaticy-codex-mobile.webp`。
 - 最终验证通过：`npm test` 31 passed，`npm run check` passed，`git diff --check` passed。
+
+## 追加计划：Codex-style `$skill` 补全
+
+### 目标
+- 在聊天 composer 中提供和 Codex 类似的 `$skill` 补全。
+- 以移动端为主路径：输入框上方显示候选，点击插入 canonical skill 名。
+- 桌面端补充键盘选择：上下键、Enter/Tab、Esc。
+- 支持通用 alias，例如 `$hw:plan` 匹配并唯一归一化为 `$hypo-workflow:plan`。
+
+### 相关边界
+- 后端 skill catalog 需要从 Codex home 读取：优先 `CODEX_HOME`，默认 `~/.codex`。
+- catalog 扫描范围为 `skills/**/SKILL.md`，包含 `.system`、普通 skill 和子 skill。
+- 后端 API 必须认证后访问，避免无登录枚举本地路径。
+- catalog 返回 `name`、`description`、`path`、`aliases`；`path` 是本机路径，仍属于登录后本地管理信息。
+- 缓存策略为 `5s TTL + ?refresh=1`，避免输入过程中频繁扫盘。
+- 前端补全只在当前光标 token 以 `$` 开头时显示，句中输入同样支持。
+- alias 冲突时不自动归一化，避免发送前误改用户文本。
+
+### 计划变更
+- M7.1：新增 skill catalog 后端、frontmatter 解析、通用 alias、缓存和 `/api/skills`。
+- M7.2：新增 composer 补全 UI、移动端点击选择、桌面键盘选择、候选过滤和替换。
+- M7.3：新增发送前 alias 归一化、冲突保护、测试、构建验证和轻量文档。
+
+### 待确认
+- M7 为单个 milestone，内部用 `M7.1-M7.3` 承载小数点步骤。
+- 规划确认后再进入执行。
+
+### 已实现结果
+- 新增 `src/skillsCatalog.js`，负责扫描 `CODEX_HOME || ~/.codex` 下的 `skills/**/SKILL.md`，解析 frontmatter，生成 canonical name 和通用 alias。
+- 新增认证后的 `/api/skills`，支持 `?refresh=1`，默认 5 秒缓存。
+- 新增 `web/src/lib/skill-completion.js`，封装当前 `$` token 检测、候选过滤、插入替换和 alias 归一化。
+- `web/src/App.vue` 登录后加载 skill catalog，并在发送前归一化唯一 alias。
+- `web/src/components/ChatView.vue` 新增移动端优先的 composer 上方候选列表，最多 5 条，支持点击和桌面键盘选择。
+- README 中补充 `$skill` 补全来源、移动端用法和 alias 行为。

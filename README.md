@@ -70,6 +70,10 @@ npm run check          # Syntax checks and frontend build
 npm test               # Backend/unit tests
 ```
 
+## Skill Completion
+
+In the chat composer, type `$` plus a prefix to pick an installed Codex skill. The list is loaded from `CODEX_HOME` or `~/.codex`, shows up to five touch-friendly options above the composer on mobile, and inserts canonical names such as `$hypo-workflow:plan`. Unique aliases such as `$hw:plan` are normalized before sending; ambiguous aliases are left unchanged.
+
 ## Local Data And Privacy
 
 Heaticy-Codex is local-first:

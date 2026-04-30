@@ -1,21 +1,21 @@
 pipeline:
   name: "heaticy-codex"
   status: completed
-  prompts_total: 6
-  prompts_completed: 5
+  prompts_total: 7
+  prompts_completed: 7
   started: "2026-04-29T01:06:43+08:00"
   finished: null
 
-last_heartbeat: "2026-04-30T15:25:00+08:00"
+last_heartbeat: "2026-04-30T18:04:00+08:00"
 
 current:
-  phase: completed
-  prompt_index: 5
-  prompt_file: ".pipeline/prompts/05-first-public-open-source-release.md"
-  prompt_name: "M6 — First public open-source release 1.0.0"
-  milestone_id: "M6"
-  step: null
-  step_index: 0
+  phase: lifecycle_debug
+  prompt_index: 6
+  prompt_file: ".pipeline/prompts/06-codex-style-skill-completion.md"
+  prompt_name: "M7 — Codex-style skill completion"
+  milestone_id: "M7"
+  step: review_code
+  step_index: 6
 
 milestones:
   - id: "M1"
@@ -120,6 +120,24 @@ milestones:
     tests:
       command: "npm test"
       result: "31 passed"
+    check:
+      command: "npm run check && git diff --check"
+      result: "passed"
+  - id: "M7"
+    title: "Codex-style skill completion"
+    prompt: ".pipeline/prompts/06-codex-style-skill-completion.md"
+    status: completed
+    current_step: review_code
+    steps:
+      write_tests: completed
+      review_tests: completed
+      run_tests_red: completed
+      implement: completed
+      run_tests_green: completed
+      review_code: completed
+    tests:
+      command: "npm test && npm run web:build"
+      result: "39 passed; web:build passed"
     check:
       command: "npm run check && git diff --check"
       result: "passed"

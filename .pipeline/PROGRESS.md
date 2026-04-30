@@ -1,9 +1,9 @@
 # heaticy-codex — 开发进度
 
-> 最后更新：2026-04-30 15:25 | 状态：已完成 | 进度：6/6 Milestone
+> 最后更新：2026-04-30 18:04 | 状态：已完成 | 进度：7/7 Milestone
 
 ## 当前状态
-✅ **全部里程碑完成** — `Heaticy-Codex 1.0.0` 首个公开开源版本准备完成
+✅ **全部里程碑完成** — `Codex-style skill completion` 已完成并通过回归
 
 ## Milestone 进度
 
@@ -15,6 +15,7 @@
 | M4 | Maintenance report UI | ✅ 完成 | 会话列表维护条、手动清理入口、web:build 通过 |
 | M5 | Final regression and documentation | ✅ 完成 | npm test / npm run check / git diff --check 通过，文档已更新 |
 | M6 | First public open-source release 1.0.0 | ✅ 完成 | 隐私、端口/LAN、双语 README、截图、发布物与最终验收完成 |
+| M7 | Codex-style skill completion | ✅ 完成 | `/api/skills`、移动端 `$skill` 补全、alias 归一化、39 个测试通过 |
 
 ## 最近活动
 - **01:06** M1 开始执行，进入 write_tests。
@@ -35,6 +36,12 @@
 - **15:14** M6 端口检测测试红灯符合预期：缺少 `scripts/lib/ports.mjs`。
 - **15:16** M6 实现端口检测、setup/dev/service 集成、双语 README、PRIVACY、CHANGELOG、release checklist、release notes 与截图资产。
 - **15:25** M6 最终验证通过：`npm test`、`npm run check`、`git diff --check`。
+- **17:40** M7 规划生成：单个 milestone，内部拆 M7.1-M7.3，等待用户确认。
+- **17:43** M7 开始执行，进入 write_tests。
+- **17:48** M7 write_tests/review_tests 完成，新增 skill catalog 与 composer completion helper 测试。
+- **17:49** M7 run_tests_red 完成：新增测试因缺少 `src/skillsCatalog.js` 和 `web/src/lib/skill-completion.js` 失败，符合预期。
+- **17:58** M7 实现完成：新增 `/api/skills`、composer 候选面板、alias 归一化和 README 说明。
+- **18:04** M7 最终验证通过：`npm test` 39 passed，`npm run check` passed，`git diff --check` passed。
 
 ## Deferred 项
 - 无

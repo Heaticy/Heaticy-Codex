@@ -224,3 +224,54 @@ entries:
     milestone: "M6"
     step: "review_code"
     command: "npm test && npm run check && git diff --check"
+  - id: "EXEC-034"
+    type: execution
+    ref: ".pipeline/prompts/06-codex-style-skill-completion.md"
+    status: running
+    timestamp: "2026-04-30T17:43:00+08:00"
+    summary: "Started M7 Codex-style skill completion, current step write_tests."
+    milestone: "M7"
+    step: "write_tests"
+    trigger: user
+  - id: "EXEC-035"
+    type: execution
+    ref: "test/skillsCatalog.test.js"
+    status: completed
+    timestamp: "2026-04-30T17:48:00+08:00"
+    summary: "M7 write_tests/review_tests completed: added backend skill catalog and frontend completion helper tests."
+    milestone: "M7"
+    step: "review_tests"
+  - id: "EXEC-036"
+    type: execution
+    ref: "test/skillsCatalog.test.js"
+    status: completed
+    timestamp: "2026-04-30T17:49:00+08:00"
+    summary: "M7 run_tests_red completed: new tests failed because skillsCatalog and skill-completion modules are missing."
+    milestone: "M7"
+    step: "run_tests_red"
+    command: "node --test test/skillsCatalog.test.js test/skillCompletion.test.js"
+  - id: "EXEC-037"
+    type: execution
+    ref: ".pipeline/prompts/06-codex-style-skill-completion.md"
+    status: completed
+    timestamp: "2026-04-30T17:58:00+08:00"
+    summary: "Implemented skill catalog API, composer skill suggestions, alias normalization, tests, and README notes."
+    milestone: "M7"
+    step: "implement"
+  - id: "EXEC-038"
+    type: execution
+    ref: ".pipeline/prompts/06-codex-style-skill-completion.md"
+    status: completed
+    timestamp: "2026-04-30T18:04:00+08:00"
+    summary: "M7 review_code completed: npm test, npm run check, and git diff --check all passed."
+    milestone: "M7"
+    step: "review_code"
+    command: "npm test && npm run check && git diff --check"
+  - id: "DEBUG-003"
+    type: debug
+    ref: ".pipeline/debug/debug-003-skill-completion-runtime.md"
+    status: completed
+    timestamp: "2026-04-30T18:02:46+08:00"
+    summary: "Root cause: running service was stale and did not expose /api/skills; restarted service and allowed bare $ to trigger skill suggestions."
+    report: ".pipeline/debug/debug-003-skill-completion-runtime.md"
+    trigger: user

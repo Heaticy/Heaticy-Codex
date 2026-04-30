@@ -70,6 +70,10 @@ npm run check          # 语法检查和前端构建
 npm test               # 后端/单元测试
 ```
 
+## Skill 补全
+
+聊天输入框里输入 `$` 加前缀即可选择本机已安装的 Codex skill。列表从 `CODEX_HOME` 或 `~/.codex` 读取，移动端会在输入框上方显示最多 5 个适合点击的候选，并插入 `$hypo-workflow:plan` 这类 canonical 名称。`$hw:plan` 这类唯一 alias 会在发送前归一化；有冲突的 alias 不会自动改写。
+
 ## 本地数据与隐私
 
 Heaticy-Codex 是本地优先的：

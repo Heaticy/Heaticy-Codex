@@ -41,3 +41,6 @@ milestones:
   - id: "M6"
     prompt: ".pipeline/prompts/05-first-public-open-source-release.md"
     title: "First public open-source release 1.0.0"
+  - id: "M7"
+    prompt: ".pipeline/prompts/06-codex-style-skill-completion.md"
+    title: "Codex-style skill completion"

@@ -105,3 +105,9 @@ export async function runMaintenanceCleanup() {
     method: "POST"
   });
 }
+
+export async function requestSkills({ refresh = false } = {}) {
+  const suffix = refresh ? "?refresh=1" : "";
+  const payload = await request(`/api/skills${suffix}`);
+  return payload?.skills || [];
+}

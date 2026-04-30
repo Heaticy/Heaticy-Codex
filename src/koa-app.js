@@ -10,6 +10,7 @@ import { handleConfigRoute } from "./routes/config.js";
 import { handleHistoryRoute } from "./routes/history.js";
 import { handleMaintenanceRoute } from "./routes/maintenance.js";
 import { handleSessionRoute } from "./routes/sessions.js";
+import { handleSkillsRoute } from "./routes/skills.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -571,7 +572,14 @@ export function createKoaApp({ config, sessionManager }) {
       return;
     }
 
-    const handled = [handleAuthRoute, handleConfigRoute, handleHistoryRoute, handleMaintenanceRoute, handleSessionRoute];
+    const handled = [
+      handleAuthRoute,
+      handleConfigRoute,
+      handleHistoryRoute,
+      handleMaintenanceRoute,
+      handleSkillsRoute,
+      handleSessionRoute
+    ];
     for (const route of handled) {
       if (await route(ctx, runtime)) {
         return;

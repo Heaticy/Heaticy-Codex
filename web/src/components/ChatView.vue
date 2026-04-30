@@ -5,6 +5,11 @@ import DOMPurify from "dompurify";
 
 import ApprovalToast from "./ApprovalToast.vue";
 import SessionStatusBar from "./SessionStatusBar.vue";
+import {
+  applySkillCompletion,
+  filterSkillCompletions,
+  findSkillToken
+} from "../lib/skill-completion.js";
 
 const BOTTOM_THRESHOLD = 84;
 const MAX_COMPOSER_HEIGHT = 160;
@@ -27,7 +32,8 @@ const props = defineProps({
   sessionMeta: { type: Object, default: () => ({}) },
   stallWarning: { type: Object, default: null },
   rawEvents: { type: Array, default: () => [] },
-  approvalRequests: { type: Array, default: () => [] }
+  approvalRequests: { type: Array, default: () => [] },
+  skills: { type: Array, default: () => [] }
 });
 
 const emit = defineEmits(["back", "update:draft", "submit", "interrupt", "create-sibling-session", "delete-session", "approval-decision", "ping-runner", "show-raw-events", "restart-runner"]);
@@ -40,6 +46,8 @@ const isTouchDevice = ref(false);
 const isMessageStreamAnchoring = ref(true);
 const showProcessDetails = ref(false);
 const lightboxImage = ref(null);
+const composerSelection = ref({ start: 0, end: 0 });
+const selectedSkillIndex = ref(0);
 let bottomAnchorRun = 0;
 let programmaticScroll = false;
 
@@ -68,6 +76,15 @@ const activeActivity = computed(() => {
   return "";
 });
 const turnIsActive = computed(() => !["", "idle", "resumed"].includes(String(props.sessionMeta?.turnState || "idle")));
+const activeSkillToken = computed(() => findSkillToken(props.draft, composerSelection.value.start));
+const skillSuggestions = computed(() => {
+  const token = activeSkillToken.value;
+  if (!token) {
+    return [];
+  }
+  return filterSkillCompletions(props.skills, token.query, 5);
+});
+const showSkillSuggestions = computed(() => skillSuggestions.value.length > 0);
 
 const PROCESS_PATTERNS = [
   /^›/,
@@ -503,13 +520,63 @@ function anchorSessionToBottom() {
 }
 
 function handleInput(event) {
+  updateComposerSelection(event.target);
   emit("update:draft", event.target.value);
   resizeComposer(event, { keepBottom: true });
+}
+
+function updateComposerSelection(target = composerEl.value) {
+  if (!target) {
+    return;
+  }
+  composerSelection.value = {
+    start: Number(target.selectionStart) || 0,
+    end: Number(target.selectionEnd) || 0
+  };
+}
+
+function applySelectedSkill(skill = skillSuggestions.value[selectedSkillIndex.value]) {
+  if (!skill) {
+    return false;
+  }
+  const result = applySkillCompletion(props.draft, composerSelection.value.start, skill);
+  emit("update:draft", result.text);
+  selectedSkillIndex.value = 0;
+  nextTick(() => {
+    if (composerEl.value) {
+      composerEl.value.focus();
+      composerEl.value.setSelectionRange(result.cursor, result.cursor);
+      updateComposerSelection(composerEl.value);
+      resizeComposer(composerEl.value, { keepBottom: true });
+    }
+  });
+  return true;
 }
 
 function handleComposerKeydown(event) {
   if (event.isComposing || event.keyCode === 229) {
     return;
+  }
+
+  if (showSkillSuggestions.value) {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      const direction = event.key === "ArrowDown" ? 1 : -1;
+      selectedSkillIndex.value =
+        (selectedSkillIndex.value + direction + skillSuggestions.value.length) % skillSuggestions.value.length;
+      return;
+    }
+    if (event.key === "Tab" || event.key === "Enter") {
+      event.preventDefault();
+      applySelectedSkill();
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      selectedSkillIndex.value = 0;
+      composerSelection.value = { start: 0, end: 0 };
+      return;
+    }
   }
 
   const wantsSubmitShortcut =
@@ -571,10 +638,15 @@ function handleStreamScroll(event) {
 }
 
 function handleComposerFocus() {
+  updateComposerSelection();
   if (!isNearBottom(messageListEl.value)) {
     return;
   }
   scrollToBottom(true);
+}
+
+function handleComposerSelection(event) {
+  updateComposerSelection(event.target);
 }
 
 function syncViewportMetrics() {
@@ -634,6 +706,13 @@ watch(
     nextTick(() => resizeComposer(composerEl.value, { keepBottom: true }));
   },
   { flush: "post", immediate: true }
+);
+
+watch(
+  () => skillSuggestions.value.map((skill) => skill.name).join("|"),
+  () => {
+    selectedSkillIndex.value = 0;
+  }
 );
 
 onMounted(() => {
@@ -760,6 +839,22 @@ onBeforeUnmount(() => {
       <ApprovalToast :requests="approvalRequests" @decide="emit('approval-decision', $event)" />
 
       <form class="composer" @submit.prevent="emit('submit')">
+        <div v-if="showSkillSuggestions" class="skill-suggestions" role="listbox" aria-label="Skill suggestions">
+          <button
+            v-for="(skill, index) in skillSuggestions"
+            :key="skill.name"
+            class="skill-suggestion"
+            :class="{ selected: index === selectedSkillIndex }"
+            type="button"
+            role="option"
+            :aria-selected="index === selectedSkillIndex"
+            @mousedown.prevent="applySelectedSkill(skill)"
+            @click.prevent="applySelectedSkill(skill)"
+          >
+            <span class="skill-suggestion-name">${{ skill.name }}</span>
+            <span class="skill-suggestion-description">{{ skill.description || skill.path || "Skill" }}</span>
+          </button>
+        </div>
         <textarea
           ref="composerEl"
           :value="draft"
@@ -770,6 +865,9 @@ onBeforeUnmount(() => {
           :enterkeyhint="isTouchDevice ? 'enter' : 'send'"
           @input="handleInput"
           @focus="handleComposerFocus"
+          @click="handleComposerSelection"
+          @keyup="handleComposerSelection"
+          @select="handleComposerSelection"
           @keydown="handleComposerKeydown"
         ></textarea>
         <button
@@ -1377,6 +1475,62 @@ onBeforeUnmount(() => {
   padding: 12px 14px calc(12px + env(safe-area-inset-bottom) + clamp(0px, var(--chat-keyboard-inset, 0px), 24px));
   background: linear-gradient(180deg, rgba(5, 11, 24, 0) 0%, rgba(5, 11, 24, 0.86) 24%, #050b18 100%);
   backdrop-filter: blur(16px);
+}
+
+.skill-suggestions {
+  position: absolute;
+  left: 14px;
+  right: 98px;
+  bottom: calc(100% - 6px);
+  max-height: min(268px, 42dvh);
+  overflow-y: auto;
+  padding: 6px;
+  border: 1px solid rgba(88, 166, 255, 0.24);
+  border-radius: 12px;
+  background: rgba(4, 11, 24, 0.96);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(18px);
+}
+
+.skill-suggestion {
+  width: 100%;
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  color: #eaf4ff;
+  text-align: left;
+  touch-action: manipulation;
+}
+
+.skill-suggestion.selected,
+.skill-suggestion:focus,
+.skill-suggestion:hover {
+  background: rgba(56, 189, 248, 0.14);
+  outline: none;
+}
+
+.skill-suggestion-name,
+.skill-suggestion-description {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-suggestion-name {
+  font-size: 13px;
+  line-height: 1.25;
+  font-weight: 700;
+  color: #f2f8ff;
+}
+
+.skill-suggestion-description {
+  font-size: 12px;
+  line-height: 1.25;
+  color: #8fb1d4;
 }
 
 .composer-interrupt {

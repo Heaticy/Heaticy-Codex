@@ -10,8 +10,10 @@ import {
   requestHistoryMessages,
   requestMaintenanceReport,
   requestSessionById,
+  requestSkills,
   runMaintenanceCleanup
 } from "./lib/api.js";
+import { normalizeSkillAliases } from "./lib/skill-completion.js";
 import { normalizeServerPayload } from "./lib/normalize-events.js";
 import {
   PREVIEW_FALLBACK,
@@ -85,6 +87,7 @@ const state = reactive({
   maintenanceLoading: false,
   maintenanceCleanupPending: false,
   maintenanceError: "",
+  skills: [],
   activeSessionId: "",
   activeLiveSessionId: "",
   activeSessionMeta: null,
@@ -929,6 +932,7 @@ function resolveWsUrl(sessionId, sinceSeq = 0) {
 
 async function bootstrapWorkspace({ includeSessions = true } = {}) {
   await loadRuntimeConfig();
+  await fetchSkills({ silent: true });
   if (includeSessions) {
     await refreshSessions();
     return;
@@ -966,6 +970,18 @@ async function fetchMaintenanceReport({ silent = false } = {}) {
     return state.maintenanceReport;
   } finally {
     state.maintenanceLoading = false;
+  }
+}
+
+async function fetchSkills({ refresh = false, silent = false } = {}) {
+  try {
+    state.skills = await requestSkills({ refresh });
+    return state.skills;
+  } catch (error) {
+    if (!silent) {
+      setStatus(error?.message || String(error));
+    }
+    return state.skills;
   }
 }
 
@@ -1583,7 +1599,7 @@ async function submitInput() {
   if (!canSend.value || state.loading) {
     return;
   }
-  const text = composerDraft.value.trim();
+  const text = normalizeSkillAliases(composerDraft.value.trim(), state.skills);
   if (!text) {
     return;
   }
@@ -2064,6 +2080,7 @@ if (typeof window !== 'undefined') {
             :raw-events="activeRawEvents"
             :status-text="connectionNotice || state.statusText"
             :approval-requests="state.approvalRequests"
+            :skills="state.skills"
             @back="backToList"
             @interrupt="interruptActiveSession"
             @create-sibling-session="createSessionFromCurrentWorkspace"
